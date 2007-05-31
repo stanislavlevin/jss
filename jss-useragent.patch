@@ -1,0 +1,13 @@
+--- jss-4.2.4/mozilla/security/jss/org/mozilla/jss/tests/JSSE_SSLClient.java.orig	2007-02-27 09:20:28.000000000 -0500
++++ jss-4.2.4/mozilla/security/jss/org/mozilla/jss/tests/JSSE_SSLClient.java	2007-02-27 09:22:32.000000000 -0500
+@@ -480,8 +480,8 @@
+     throws IOException {
+         OutputStream out = tunnel.getOutputStream();
+         String msg = "CONNECT " + host + ":" + port + " HTTP/1.0\n"
+-                + "User-Agent: "
+-                + sun.net.www.protocol.http.HttpURLConnection.userAgent
++                + "User-Agent: Java/"
++                + System.getProperty("java.runtime.version")
+                 + "\r\n\r\n";
+         byte b[];
+         try {

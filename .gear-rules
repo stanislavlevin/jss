@@ -1,0 +1,3 @@
+copy: *.patch
+copy: *.txt
+tar.gz: jss
