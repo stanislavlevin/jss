@@ -42,16 +42,16 @@ public final class JSSProvider extends java.security.Provider {
     /* files everytime a new release of JSS is generated:               */
     /*                                                                  */
     /* org/mozilla/jss/CryptoManager.java                               */
-    /* org/mozilla/jss/CryptoManager.c                                  */
     /* org/mozilla/jss/JSSProvider.java                                 */
     /* org/mozilla/jss/util/jssver.h                                    */
     /* lib/manifest.mn                                                  */
+    /* mozilla/security/jss/manifest.mn                                 */
     /*                                                                  */
     /********************************************************************/
 
     private static int JSS_MAJOR_VERSION  = 4;
     private static int JSS_MINOR_VERSION  = 2;
-    private static int JSS_PATCH_VERSION  = 4;
+    private static int JSS_PATCH_VERSION  = 5;
     private static double JSS_VERSION     = JSS_MAJOR_VERSION +
                                            (JSS_MINOR_VERSION * 100 +
                                             JSS_PATCH_VERSION)/10000.0;
@@ -125,7 +125,7 @@ public final class JSSProvider extends java.security.Provider {
         put("Signature.SHA512withEC",
             "org.mozilla.jss.provider.java.security.JSSSignatureSpi$SHA512EC");
         put("Alg.Alias.Signature.SHA512/EC", "SHA512withEC");
-        put("Alg.Alias.Signature.SHA-512/EC", "SHA384withEC");
+        put("Alg.Alias.Signature.SHA-512/EC", "SHA512withEC");
 
         /////////////////////////////////////////////////////////////
         // Message Digesting

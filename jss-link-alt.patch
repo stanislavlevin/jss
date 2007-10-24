@@ -1,0 +1,12 @@
+diff -ur jss/mozilla/security/coreconf/Linux2.6.mk jss.new/mozilla/security/coreconf/Linux2.6.mk
+--- jss/mozilla/security/coreconf/Linux2.6.mk	2006-01-14 01:41:03 +0300
++++ jss.new/mozilla/security/coreconf/Linux2.6.mk	2007-10-23 16:44:32 +0400
+@@ -37,7 +37,7 @@
+ 
+ include $(CORE_DEPTH)/coreconf/Linux.mk
+ 
+-DSO_LDOPTS      += -Wl,-z,defs
++DSO_LDOPTS      += 
+ 
+ OS_REL_CFLAGS   += -DLINUX2_1
+ MKSHLIB         = $(CC) $(DSO_LDOPTS) -Wl,-soname -Wl,$(@:$(OBJDIR)/%.so=%.so)

@@ -55,12 +55,27 @@ import java.io.PrintWriter;
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.io.*;
+import java.net.SocketException;
 
 public class SSLClientAuth implements Runnable {
 
+    private CryptoManager cm;
     public static final SignatureAlgorithm sigAlg = 
             SignatureAlgorithm.RSASignatureWithSHA1Digest;
 
+     /**
+     * Method that generates a certificate for given credential
+     * 
+     * @param issuerName 
+     * @param subjectName 
+     * @param serialNumber 
+     * @param privKey 
+     * @param pubKey 
+     * @param rand 
+     * @param extensions 
+     * @throws java.lang.Exception 
+     * @return 
+     */
     public static Certificate makeCert(String issuerName, String subjectName,
         int serialNumber, PrivateKey privKey, PublicKey pubKey, int rand,
         SEQUENCE extensions) throws Exception
@@ -100,6 +115,11 @@ public class SSLClientAuth implements Runnable {
         return new Certificate(info, privKey, sigAlg);
     }
 
+    /**
+     * 
+     * @param args 
+     * @throws java.lang.Exception 
+     */
     public static void main(String[] args) throws Exception {
         (new SSLClientAuth()).doIt(args);
     }
@@ -108,6 +128,11 @@ public class SSLClientAuth implements Runnable {
     private String serverCertNick, clientCertNick;
 
 
+    /**
+     * 
+     * @param args 
+     * @throws java.lang.Exception 
+     */
     public void doIt(String[] args) throws Exception {
 
         if ( args.length < 2 ) {
@@ -118,7 +143,7 @@ public class SSLClientAuth implements Runnable {
         }
 
         CryptoManager.initialize(args[0]);
-        CryptoManager cm = CryptoManager.getInstance();
+        cm = CryptoManager.getInstance();
         CryptoToken tok = cm.getInternalKeyStorageToken();
 
         PasswordCallback cb = new FilePasswordCallback(args[1]);
@@ -134,20 +159,30 @@ public class SSLClientAuth implements Runnable {
            System.out.println("enabled bypassPKCS11 mode for all sockets");
            System.out.println(SSLSocket.getSSLDefaultOptions());
         }
+
         SecureRandom rng= SecureRandom.getInstance("pkcs11prng",
             "Mozilla-JSS");
-        int rand = nextRandInt(rng);
-
+        int rand;
+        X509Certificate[] certs;
+        do {
+            /* ensure certificate does not already exists */
+            /* we don't have to test all three */
+            rand = nextRandInt (rng);
+            serverCertNick = "servercertnick"+rand;
+            certs = cm.findCertsByNickname (serverCertNick);
+        } while (certs.length > 0);
+            
         // generate CA cert
-        // 512-bit RSA Key with default exponent
+        // RSA Key with default exponent
+        int keyLength = 512;
         java.security.KeyPairGenerator kpg =
         java.security.KeyPairGenerator.getInstance("RSA", "Mozilla-JSS");
-        kpg.initialize(512);
+        kpg.initialize(keyLength);
         KeyPair caPair = kpg.genKeyPair();
 
         SEQUENCE extensions = new SEQUENCE();
         extensions.addElement(makeBasicConstraintsExtension());
-        Certificate caCert = makeCert("CACert", "CACert", 1,
+        Certificate caCert = makeCert("CACert", "CACert", rand+1,
             caPair.getPrivate(), caPair.getPublic(), rand, extensions);
         X509Certificate nssCaCert = cm.importUserCACertPackage(
             ASN1Util.encode(caCert), "cacertnick"+rand);
@@ -158,29 +193,23 @@ public class SSLClientAuth implements Runnable {
             InternalCertificate.VALID_CA);
 
         // generate server cert
-        kpg.initialize(512);
+        kpg.initialize(keyLength);
         KeyPair serverPair = kpg.genKeyPair();
-        Certificate serverCert = makeCert("CACert", "localhost", 2,
+        Certificate serverCert = makeCert("CACert", "localhost", rand+2,
             caPair.getPrivate(), serverPair.getPublic(), rand, null);
         serverCertNick = "servercertnick"+rand;
         nssServerCert = cm.importCertPackage(
             ASN1Util.encode(serverCert), serverCertNick);
 
         // generate client auth cert
-        kpg.initialize(512);
+        kpg.initialize(keyLength);
         KeyPair clientPair = kpg.genKeyPair();
-        Certificate clientCert = makeCert("CACert", "ClientCert", 3,
+        Certificate clientCert = makeCert("CACert", "ClientCert", rand+3,
             caPair.getPrivate(), clientPair.getPublic(), rand, null);
         clientCertNick = "clientcertnick"+rand;
         nssClientCert = cm.importCertPackage(
             ASN1Util.encode(clientCert), clientCertNick);
-        //Disable SSL2 and SSL3 ciphers
-        SSLSocket.enableSSL2Default(false);
-        SSLSocket.enableSSL3Default(false);
-        //The cipher TLS_RSA_WITH_AES_128_CBC_SHA is chosen since 
-        //it works when the NSS database is FIPS mode and also non FIPS mode
-        SSLSocket.setCipherPreferenceDefault(
-            SSLSocket.TLS_RSA_WITH_AES_128_CBC_SHA, true);
+        configureDefaultSSLoptions();
 
         useNickname = false;
         testConnection();
@@ -196,6 +225,38 @@ public class SSLClientAuth implements Runnable {
     }
 
     private boolean useNickname;
+    
+    private void configureDefaultSSLoptions() {
+        try {
+            //Disable SSL2 and SSL3 ciphers
+            SSLSocket.enableSSL2Default(false);
+            SSLSocket.enableSSL3Default(false);
+            /* TLS is enabled by default */
+            
+            /* if FIPS is enabled, configure only FIPS ciphersuites */
+            if (cm.FIPSEnabled()) {
+                System.out.println("The NSS database is confirued in FIPS" +
+                    "mode.");
+                System.out.println("Enable ony FIPS ciphersuites.");
+                int ciphers[] =
+                org.mozilla.jss.ssl.SSLSocket.getImplementedCipherSuites();
+                for (int i = 0; i < ciphers.length;  ++i) {
+                    if (SSLSocket.isFipsCipherSuite(ciphers[i])) {
+                        /* enable the FIPS ciphersuite */
+                        SSLSocket.setCipherPreferenceDefault(ciphers[i], true);
+                    } else if (SSLSocket.getCipherPreferenceDefault(
+                            ciphers[i])) {
+                        /* disable the non fips ciphersuite */
+                        SSLSocket.setCipherPreferenceDefault(ciphers[i], false);
+                    }
+                }
+            }
+        } catch (SocketException ex) {
+            System.out.println("Error configuring default SSL options.");
+            ex.printStackTrace();
+            System.exit(1);
+        }
+    }
 
     private void testConnection() throws Exception {
         serverReady = false;
@@ -227,7 +288,8 @@ public class SSLClientAuth implements Runnable {
 
         // force the handshake
         sock.forceHandshake();
-        System.out.println("client forced handshake");
+        String cipher = sock.getStatus().getCipher();
+        System.out.println("client forced handshake. ciphersuite: " + cipher);
         sock.close();
 
         // wait for the server to finish
@@ -289,7 +351,7 @@ public class SSLClientAuth implements Runnable {
         SSLServerSocket serverSock = new SSLServerSocket(port, 5, null, null,
             true);
         System.out.println("Server created socket");
-        serverSock.requireClientAuth(true, true);
+        serverSock.requireClientAuth(SSLSocket.SSL_REQUIRE_NO_ERROR);
         if( useNickname ) {
             serverSock.setServerCertNickname(serverCertNick);
             System.out.println("Server specified cert by nickname");
@@ -344,9 +406,13 @@ public class SSLClientAuth implements Runnable {
     }
 
     static int nextRandInt(SecureRandom rand) throws Exception {
+        int i;
         byte[] bytes = new byte[4];
         rand.nextBytes(bytes);
-        return  ((int)bytes[0])<<24 | ((int)bytes[1])<<16 |
+        i =  ((int)bytes[0])<<24 | ((int)bytes[1])<<16 |
                 ((int)bytes[2])<<8 | ((int)bytes[3]);
+        System.out.println("generated random value:" + i);
+        return i;
     }
+
 }
