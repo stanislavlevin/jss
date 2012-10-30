@@ -1,3 +1,4 @@
+copy: *.info
 copy: *.patch
 copy: *.txt
-tar.bz2: jss
+tar.gz: jss
