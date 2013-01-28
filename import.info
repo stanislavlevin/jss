@@ -1,9 +1,18 @@
-EVR: 4.2.6-25.fc18
+EVR: 4.2.6-28.fc19
 Name: jss
 Version: 4.2.6
-Release: 25
-srpm: /var/ftp/pub/Linux/fedora/linux/development/rawhide/source/SRPMS/j/jss-4.2.6-25.fc18.src.rpm
+Release: 28
+srpm: /var/ftp/pub/Linux/fedora/linux/development/rawhide/source/SRPMS/j/jss-4.2.6-28.fc19.src.rpm
 %changelog
+* Wed Dec 19 2012 Stanislav Ochotnicky <sochotnicky@redhat.com> - 4.2.6-28
+- revbump after jnidir change
+
+* Wed Dec 12 2012 Stanislav Ochotnicky <sochotnicky@redhat.com> - 4.2.6-27
+- Simple rebuild
+
+* Mon Nov 19 2012 Christina Fu <cfu@redhat.com> - 4.2.6-26
+- added source URLs in spec file to pass Package Wrangler
+
 * Thu Jul 19 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.2.6-25
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_18_Mass_Rebuild
 
