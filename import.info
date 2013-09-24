@@ -1,9 +1,15 @@
-EVR: 4.2.6-29.fc19
+EVR: 4.2.6-31.fc20
 Name: jss
 Version: 4.2.6
-Release: 29
-srpm: /var/ftp/pub/Linux/fedora/linux/development/rawhide/source/SRPMS/j/jss-4.2.6-29.fc19.src.rpm
+Release: 31
+srpm: /var/ftp/pub/Linux/fedora/linux/development/rawhide/source/SRPMS/j/jss-4.2.6-31.fc20.src.rpm
 %changelog
+* Sat Aug 03 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.2.6-31
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_20_Mass_Rebuild
+
+* Wed Jul 17 2013 Nathan Kinder <nkinder@redhat.com> - 4.2.6-30
+- Bugzilla Bug #847120 - Unable to build JSS on F17 or newer
+
 * Thu Feb 14 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.2.6-29
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_19_Mass_Rebuild
 
@@ -167,5 +173,5 @@ srpm: /var/ftp/pub/Linux/fedora/linux/development/rawhide/source/SRPMS/j/jss-4.2
 - Added RPM_OPT_FLAGS to XCFLAGS
 - Added link to Sun JCE information
 
-* Mon Feb 27 2007 Rob Crittenden <rcritten@redhat.com> 4.2.4-1
+* Tue Feb 27 2007 Rob Crittenden <rcritten@redhat.com> 4.2.4-1
 - Initial build
