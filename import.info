@@ -1,9 +1,32 @@
-EVR: 4.2.6-31.fc20
+EVR: 4.2.6-37.fc23
 Name: jss
 Version: 4.2.6
-Release: 31
-srpm: /var/ftp/pub/Linux/fedora/linux/development/rawhide/source/SRPMS/j/jss-4.2.6-31.fc20.src.rpm
+Release: 37
+srpm: /var/ftp/pub/Linux/fedora/linux/development/rawhide/source/SRPMS/j/jss-4.2.6-37.fc23.src.rpm
 %changelog
+* Thu Apr 09 2015 Marcin Juszkiewicz <mjuszkiewicz@redhat.com> - 4.2.6-37
+- Fix use of __isa_bits macro so it does not fail during srpm generation on koji
+
+* Thu Apr 09 2015 Marcin Juszkiewicz <mjuszkiewicz@redhat.com> - 4.2.6-36
+- Use __isa_bits macro to check for 64-bit arch. Unblocks aarch64 and ppc64le.
+
+* Tue Sep 30 2014 Christina Fu <cfu@redhat.com> - 4.2.6-35
+- Bugzilla Bug #1040640 - Incorrect OIDs for SHA2 algorithms
+  (cfu for jnimeh@gmail.com)
+- Bugzilla Bug #1133718 - Key strength validation is not performed for RC4
+  algorithm (nkinder)
+- Bugzilla Bug #816396 - Provide Tomcat support for TLS v1.1 and
+  TLS v1.2 via NSS through JSS (cfu)
+
+* Sat Aug 16 2014 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.2.6-34
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_21_22_Mass_Rebuild
+
+* Sun Jun 08 2014 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.2.6-33
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_21_Mass_Rebuild
+
+* Fri Mar 28 2014 Michael Simacek <msimacek@redhat.com> - 4.2.6-32
+- Use Requires: java-headless rebuild (#1067528)
+
 * Sat Aug 03 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 4.2.6-31
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_20_Mass_Rebuild
 
