@@ -1,0 +1,18 @@
+commit 63d097320e73fba5f6f39ab42c0185297e1015d3 (HEAD -> sisyphus)
+Author: Mikhail Efremov <sem@altlinux.org>
+Date:   Fri Nov 18 17:06:20 2016 +0300
+
+    Fix build with --as-needed
+
+diff --git a/mozilla/security/jss/lib/config.mk b/mozilla/security/jss/lib/config.mk
+index 216874d..deec428 100644
+--- a/mozilla/security/jss/lib/config.mk
++++ b/mozilla/security/jss/lib/config.mk
+@@ -87,6 +87,7 @@ EXTRA_SHARED_LIBS += \
+     -L$(NSPR_LIB_DIR) \
+     $(addprefix -l, $(NSPR_LIB_NAMES)) \
+     $(JAVA_LIBS) \
++    -lsmime3 \
+     $(NULL)
+ 
+ endif

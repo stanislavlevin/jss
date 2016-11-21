@@ -1,0 +1,1855 @@
+diff -up ./mozilla/security/jss/build_java.pl.jmagne ./mozilla/security/jss/build_java.pl
+--- ./mozilla/security/jss/build_java.pl.jmagne	2016-04-14 13:56:16.946920239 -0700
++++ ./mozilla/security/jss/build_java.pl	2016-04-14 14:53:08.501298062 -0700
+@@ -31,7 +31,8 @@ org.mozilla.jss.pkcs11.PK11MessageDigest
+ org.mozilla.jss.pkcs11.PK11PrivKey   
+ org.mozilla.jss.pkcs11.PK11PubKey     
+ org.mozilla.jss.pkcs11.PK11SymKey      
+-org.mozilla.jss.pkcs11.PK11KeyPairGenerator 
++org.mozilla.jss.pkcs11.PK11KeyPairGenerator
++org.mozilla.jss.pkcs11.PK11SymmetricKeyDeriver
+ org.mozilla.jss.pkcs11.PK11KeyGenerator
+ org.mozilla.jss.pkcs11.PK11Token
+ org.mozilla.jss.pkcs11.PrivateKeyProxy  
+diff -up ./mozilla/security/jss/lib/jss.def.jmagne ./mozilla/security/jss/lib/jss.def
+--- ./mozilla/security/jss/lib/jss.def.jmagne	2016-04-14 16:00:06.229534228 -0700
++++ ./mozilla/security/jss/lib/jss.def	2016-04-14 16:00:32.229356314 -0700
+@@ -158,6 +158,7 @@ Java_org_mozilla_jss_pkcs11_PK11Store_de
+ Java_org_mozilla_jss_pkcs11_PK11Store_importPrivateKey;
+ Java_org_mozilla_jss_pkcs11_PK11Store_putCertsInVector;
+ Java_org_mozilla_jss_pkcs11_PK11Store_putKeysInVector;
++Java_org_mozilla_jss_pkcs11_PK11Store_putSymKeysInVector;
+ Java_org_mozilla_jss_pkcs11_SigContextProxy_releaseNativeResources;
+ Java_org_mozilla_jss_pkcs11_PK11RSAPublicKey_getModulusByteArray;
+ Java_org_mozilla_jss_pkcs11_PK11RSAPublicKey_getPublicExponentByteArray;
+@@ -336,6 +337,8 @@ Java_org_mozilla_jss_CryptoManager_verif
+ Java_org_mozilla_jss_asn1_ASN1Util_getTagDescriptionByOid;
+ Java_org_mozilla_jss_ssl_SocketBase_setSSLVersionRange;
+ Java_org_mozilla_jss_ssl_SSLSocket_setSSLVersionRangeDefault;
++Java_org_mozilla_jss_pkcs11_PK11SymmetricKeyDeriver_nativeDeriveSymKey;
++Java_org_mozilla_jss_pkcs11_PK11SymKey_setNickNameNative;
+ ;+    local:
+ ;+       *;
+ ;+};
+diff -up ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.c.jmagne ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.c
+--- ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.c.jmagne	2016-04-14 16:02:38.108494940 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.c	2016-04-14 16:02:47.243432431 -0700
+@@ -114,6 +114,11 @@ JSS_AlgInfo JSS_AlgTable[NUM_ALGS] = {
+ /* 51 */    {SEC_OID_PKCS5_PBKDF2, SEC_OID_TAG},
+ /* 52 */    {SEC_OID_PKCS5_PBES2, SEC_OID_TAG},
+ /* 53 */    {SEC_OID_PKCS5_PBMAC1, SEC_OID_TAG},
++/* 54 */    {SEC_OID_HMAC_SHA1,SEC_OID_TAG},
++/* 55 */    {SEC_OID_HMAC_SHA224,SEC_OID_TAG},
++/* 56 */    {SEC_OID_HMAC_SHA256,SEC_OID_TAG},
++/* 57 */    {SEC_OID_HMAC_SHA384,SEC_OID_TAG},
++/* 58 */    {SEC_OID_HMAC_SHA512,SEC_OID_TAG}
+ /* REMEMBER TO UPDATE NUM_ALGS!!! */
+ };
+ 
+diff -up ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.h.jmagne ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.h
+--- ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.h.jmagne	2016-04-14 11:30:41.871517926 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.h	2016-04-14 11:30:54.933436860 -0700
+@@ -56,7 +56,7 @@ typedef struct JSS_AlgInfoStr {
+     JSS_AlgType type;
+ } JSS_AlgInfo;
+ 
+-#define NUM_ALGS 54
++#define NUM_ALGS 59
+ 
+ extern JSS_AlgInfo JSS_AlgTable[];
+ extern CK_ULONG JSS_symkeyUsage[];
+diff -up ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.java.jmagne ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.java
+--- ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.java.jmagne	2016-04-14 16:06:13.388021812 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/crypto/Algorithm.java	2016-04-14 16:06:27.537924813 -0700
+@@ -237,5 +237,9 @@ public class Algorithm {
+     protected static final short SEC_OID_PKCS5_PBKDF2=51;
+     protected static final short SEC_OID_PKCS5_PBES2=52;
+     protected static final short SEC_OID_PKCS5_PBMAC1=53;
+-
++    protected static final short SEC_OID_HMAC_SHA1=54;
++    protected static final short SEC_OID_HMAC_SHA224=55;
++    protected static final short SEC_OID_HMAC_SHA256=56;
++    protected static final short SEC_OID_HMAC_SHA384=57;
++    protected static final short SEC_OID_HMAC_SHA512=58;
+ }
+diff -up ./mozilla/security/jss/org/mozilla/jss/crypto/CryptoStore.java.jmagne ./mozilla/security/jss/org/mozilla/jss/crypto/CryptoStore.java
+--- ./mozilla/security/jss/org/mozilla/jss/crypto/CryptoStore.java.jmagne	2016-04-14 17:03:33.504298176 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/crypto/CryptoStore.java	2016-04-14 17:03:42.198238112 -0700
+@@ -75,6 +75,18 @@ public interface CryptoStore {
+     getPrivateKeys() throws TokenException;
+ 
+     /**
++     * Returns all symmetric keys stored on this token.
++     *
++     * @return An array of all symmetric keys stored on this token.
++     * @exception TokenException If an error occurs on the token while
++     *      gathering the keys.
++     */
++    public SymmetricKey[]
++    getSymmetricKeys() throws TokenException;
++
++
++
++    /**
+      * Deletes the given PrivateKey from the CryptoToken.
+      * This is a very dangerous call: it deletes the key from the underlying
+      * token. After calling this, the PrivateKey passed in must no longer
+diff -up ./mozilla/security/jss/org/mozilla/jss/crypto/CryptoToken.java.jmagne ./mozilla/security/jss/org/mozilla/jss/crypto/CryptoToken.java
+--- ./mozilla/security/jss/org/mozilla/jss/crypto/CryptoToken.java.jmagne	2016-04-14 16:07:39.458429756 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/crypto/CryptoToken.java	2016-04-14 16:07:52.266341595 -0700
+@@ -92,6 +92,9 @@ public interface CryptoToken {
+     getCipherContext(EncryptionAlgorithm algorithm)
+         throws java.security.NoSuchAlgorithmException, TokenException;
+ 
++    public abstract SymmetricKeyDeriver getSymmetricKeyDeriver() 
++        throws TokenException;
++
+     public abstract KeyWrapper
+     getKeyWrapper(KeyWrapAlgorithm algorithm)
+         throws java.security.NoSuchAlgorithmException, TokenException;
+diff -up ./mozilla/security/jss/org/mozilla/jss/crypto/HMACAlgorithm.java.jmagne ./mozilla/security/jss/org/mozilla/jss/crypto/HMACAlgorithm.java
+--- ./mozilla/security/jss/org/mozilla/jss/crypto/HMACAlgorithm.java.jmagne	2016-04-14 16:09:02.858855679 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/crypto/HMACAlgorithm.java	2016-04-14 16:09:18.048751121 -0700
+@@ -85,4 +85,21 @@ public class HMACAlgorithm extends Diges
+     public static final HMACAlgorithm SHA1 = new HMACAlgorithm
+         (CKM_SHA_1_HMAC, "SHA-1-HMAC",
+              OBJECT_IDENTIFIER.ALGORITHM.subBranch(26), 20);
++
++    public static final HMACAlgorithm SHA224 = new HMACAlgorithm
++        (SEC_OID_HMAC_SHA224, "SHA-224-HMAC",
++             OBJECT_IDENTIFIER.RSADSI.subBranch(8), 28);
++
++    public static final HMACAlgorithm SHA256 = new HMACAlgorithm
++        (SEC_OID_HMAC_SHA256, "SHA-256-HMAC",
++             OBJECT_IDENTIFIER.RSADSI.subBranch(9), 32);
++
++    public static final HMACAlgorithm SHA384 = new HMACAlgorithm
++        (SEC_OID_HMAC_SHA384, "SHA-384-HMAC",
++             OBJECT_IDENTIFIER.RSADSI.subBranch(10), 48);
++
++    public static final HMACAlgorithm SHA512 = new HMACAlgorithm
++        (SEC_OID_HMAC_SHA512, "SHA-512-HMAC",
++             OBJECT_IDENTIFIER.RSADSI.subBranch(11), 64);
++
+ }
+diff -up ./mozilla/security/jss/org/mozilla/jss/crypto/KeyWrapper.java.jmagne ./mozilla/security/jss/org/mozilla/jss/crypto/KeyWrapper.java
+--- ./mozilla/security/jss/org/mozilla/jss/crypto/KeyWrapper.java.jmagne	2016-04-14 16:10:43.930159965 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/crypto/KeyWrapper.java	2016-04-14 16:10:55.377081172 -0700
+@@ -133,4 +133,21 @@ public interface KeyWrapper {
+         throws TokenException, IllegalStateException,
+             InvalidAlgorithmParameterException;
+ 
++    public SymmetricKey unwrapSymmetricPerm(byte[] wrapped, SymmetricKey.Type type,
++        SymmetricKey.Usage usage, int keyLength)
++        throws TokenException, IllegalStateException,
++            InvalidAlgorithmParameterException;
++
++    /**
++     * Unwraps a key and allows it to be used for all operations.
++     * @param keyLength The expected length of the key in bytes.  This is
++     *   only used for variable-length keys (RC4) and non-padding
++     *   algorithms. Otherwise, it can be set to anything(like 0).
++     */
++    public SymmetricKey unwrapSymmetricPerm(byte[] wrapped, SymmetricKey.Type type,
++        int keyLength)
++        throws TokenException, IllegalStateException,
++            InvalidAlgorithmParameterException;
++
++
+ }
+diff -up ./mozilla/security/jss/org/mozilla/jss/crypto/SymmetricKeyDeriver.java.jmagne ./mozilla/security/jss/org/mozilla/jss/crypto/SymmetricKeyDeriver.java
+--- ./mozilla/security/jss/org/mozilla/jss/crypto/SymmetricKeyDeriver.java.jmagne	2016-04-14 16:36:36.080464052 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/crypto/SymmetricKeyDeriver.java	2016-04-14 16:36:49.784369514 -0700
+@@ -0,0 +1,79 @@
++/* ***** BEGIN LICENSE BLOCK *****
++ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
++ *
++ * The contents of this file are subject to the Mozilla Public License Version
++ * 1.1 (the "License"); you may not use this file except in compliance with
++ * the License. You may obtain a copy of the License at
++ * http://www.mozilla.org/MPL/
++ *
++ * Software distributed under the License is distributed on an "AS IS" basis,
++ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
++ * for the specific language governing rights and limitations under the
++ * License.
++ *
++ * The Original Code is the Netscape Security Services for Java.
++ *     
++ * The Initial Developer of the Original Code is
++ * Netscape Communications Corporation.
++ * Portions created by the Initial Developer are Copyright (C) 1998-2000
++ * the Initial Developer. All Rights Reserved.
++ *
++ * Contributor(s):
++ *
++ * Alternatively, the contents of this file may be used under the terms of
++ * either the GNU General Public License Version 2 or later (the "GPL"), or
++ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
++ * in which case the provisions of the GPL or the LGPL are applicable instead
++ * of those above. If you wish to allow use of your version of this file only
++ * under the terms of either the GPL or the LGPL, and not to allow others to
++ * use your version of this file under the terms of the MPL, indicate your
++ * decision by deleting the provisions above and replace them with the notice
++ * and other provisions required by the GPL or the LGPL. If you do not delete
++ * the provisions above, a recipient may use your version of this file under
++ * the terms of any one of the MPL, the GPL or the LGPL.
++ *
++ * ***** END LICENSE BLOCK ***** */
++
++package org.mozilla.jss.crypto;
++
++import java.security.spec.AlgorithmParameterSpec;
++import java.security.InvalidAlgorithmParameterException;
++import java.security.PublicKey;
++import java.security.InvalidKeyException;
++
++public interface SymmetricKeyDeriver {
++
++   /* Use with the encrypt type mechanisms
++      Example: initDerive(
++                    symKey,  (PKCS11Constants.CKM_DES3_ECB_ENCRYPT_DATA) 4354L, derivationData, null,
++                    PKCS11Constants.CKM_DES3_ECB, PKCS11Constants.CKA_DERIVE, 16);
++   */
++
++    public abstract void initDerive(SymmetricKey baseKey, 
++        long deriveMech, byte[] param, byte[] iv, long targetMech, long operation, long keySize)
++        throws InvalidKeyException;
++
++
++
++    /* Use with key extraction and key concatanation mechanisms
++  
++    Example:
++       param: byte array that has the bit position of where to extract
++     initDerive(
++                derivedKey, PKCS11Constants.CKM_EXTRACT_KEY_FROM_KEY,param,null,
++                PKCS11Constants.CKA_ENCRYPT, PKCS11Constants.CKA_DERIVE,8);
++ 
++ 
++    initDerive(
++               baseSymKey,secondarySymKey, PKCS11Constants.CKM_CONCATENATE_BASE_AND_KEY,null,null,
++               PKCS11Constants.CKM_DES3_ECB, PKCS11Constants.CKA_DERIVE,0);
++ 
++    */ 
++
++    public abstract void initDerive(SymmetricKey baseKey, 
++        SymmetricKey secondaryKey, long deriveMech, byte[] param, byte[] iv, long targetMech, long operation, long keySize)
++        throws InvalidKeyException; 
++
++   public abstract SymmetricKey  derive()
++       throws TokenException;
++}
+diff -up ./mozilla/security/jss/org/mozilla/jss/crypto/SymmetricKey.java.jmagne ./mozilla/security/jss/org/mozilla/jss/crypto/SymmetricKey.java
+--- ./mozilla/security/jss/org/mozilla/jss/crypto/SymmetricKey.java.jmagne	2016-04-14 16:11:50.865699222 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/crypto/SymmetricKey.java	2016-04-14 16:12:02.768617289 -0700
+@@ -71,6 +71,10 @@ public interface SymmetricKey {
+ 
+     String getFormat();
+ 
++    String getNickName();
++
++    void setNickName(String nickName);
++
+     public final static class Type {
+         // all names converted to lowercase for case insensitivity
+         private static Hashtable nameMap = new Hashtable();
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/manifest.mn.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/manifest.mn
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/manifest.mn.jmagne	2016-04-14 16:15:59.271989344 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/manifest.mn	2016-04-14 16:16:10.670910881 -0700
+@@ -64,6 +64,7 @@ CSRCS =                             \
+ 			PK11Store.c				\
+             PK11SymKey.c            \
+ 			PK11Token.c				\
++            PK11SymmetricKeyDeriver.c \
+             $(NULL)
+ 
+ 
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.c.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.c
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.c.jmagne	2016-04-14 16:17:29.760366477 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.c	2016-04-14 16:17:58.742166983 -0700
+@@ -519,7 +519,7 @@ JNIEXPORT jobject JNICALL
+ Java_org_mozilla_jss_pkcs11_PK11KeyWrapper_nativeUnwrapSymWithSym
+     (JNIEnv *env, jclass clazz, jobject tokenObj, jobject unwrapperObj,
+         jbyteArray wrappedBA, jobject wrapAlgObj, jobject typeAlgObj,
+-        jint keyLen, jbyteArray ivBA, jint usageEnum)
++        jint keyLen, jbyteArray ivBA, jint usageEnum,jboolean temporary)
+ {
+     PK11SymKey *symKey=NULL, *wrappingKey=NULL;
+     CK_MECHANISM_TYPE wrappingMech, keyTypeMech;
+@@ -527,6 +527,7 @@ Java_org_mozilla_jss_pkcs11_PK11KeyWrapp
+     jobject keyObj = NULL;
+     CK_ULONG operation;
+     CK_FLAGS flags;
++    PRBool isPermanent = PR_FALSE;
+ 
+     /* get key type */
+     keyTypeMech = JSS_getPK11MechFromAlg(env, typeAlgObj);
+@@ -579,8 +580,21 @@ Java_org_mozilla_jss_pkcs11_PK11KeyWrapp
+         flags = 0;
+     }
+ 
+-    symKey = PK11_UnwrapSymKeyWithFlags(wrappingKey, wrappingMech, param,
+-        wrappedKey, keyTypeMech, operation, keyLen, flags);
++    if( temporary ) {
++        isPermanent = PR_FALSE;
++    } else {
++        isPermanent = PR_TRUE;
++    }
++
++    if( isPermanent == PR_FALSE) {
++        symKey = PK11_UnwrapSymKeyWithFlags(wrappingKey, wrappingMech, param,
++            wrappedKey, keyTypeMech, operation, keyLen, flags);
++
++    } else {
++        symKey = PK11_UnwrapSymKeyWithFlagsPerm(wrappingKey, wrappingMech, param,
++            wrappedKey, keyTypeMech, operation, keyLen, flags,isPermanent);
++    }
++
+     if( symKey == NULL ) {
+         JSS_throwMsg(env, TOKEN_EXCEPTION, "Failed to unwrap key");
+         goto finish;
+@@ -702,7 +716,7 @@ finish:
+ JNIEXPORT jobject JNICALL
+ Java_org_mozilla_jss_pkcs11_PK11KeyWrapper_nativeUnwrapSymPlaintext
+     (JNIEnv *env, jclass clazz, jobject tokenObj, jbyteArray wrappedBA,
+-        jobject typeAlgObj, jint usageEnum)
++        jobject typeAlgObj, jint usageEnum,jboolean temporary)
+ {
+     PK11SymKey *symKey=NULL;
+     CK_MECHANISM_TYPE keyTypeMech;
+@@ -711,6 +725,8 @@ Java_org_mozilla_jss_pkcs11_PK11KeyWrapp
+     PK11SlotInfo *slot = NULL;
+     CK_ULONG operation;
+     CK_FLAGS flags;
++    PRBool isPerm = PR_FALSE;
++
+ 
+     /* get key type */
+     keyTypeMech = JSS_getPK11MechFromAlg(env, typeAlgObj);
+@@ -740,9 +756,15 @@ Java_org_mozilla_jss_pkcs11_PK11KeyWrapp
+         flags = 0;
+     }
+ 
++    if( temporary ) {
++        isPerm = PR_FALSE;
++    } else {
++        isPerm = PR_TRUE;
++    }
++
+     /* pull in the key */
+     symKey = PK11_ImportSymKeyWithFlags(slot, keyTypeMech, PK11_OriginUnwrap,
+-        operation, wrappedKey, flags, PR_FALSE /*isPerm*/, NULL);
++        operation, wrappedKey, flags, isPerm, NULL);
+     if( symKey == NULL ) {
+         JSS_throwMsg(env, TOKEN_EXCEPTION, "Failed to unwrap key");
+         goto finish;
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.java.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.java
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.java.jmagne	2016-04-14 16:19:26.998559480 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.java	2016-04-14 16:19:40.941463506 -0700
+@@ -498,8 +498,25 @@ final class PK11KeyWrapper implements Ke
+         return unwrapSymmetric(wrapped, type, -1, keyLen);
+     }
+ 
++    public SymmetricKey
++    unwrapSymmetricPerm(byte[] wrapped, SymmetricKey.Type type,
++        SymmetricKey.Usage usage, int keyLen)
++        throws TokenException, IllegalStateException,
++            InvalidAlgorithmParameterException
++    {
++        return unwrapSymmetricPerm(wrapped, type, usage.getVal(), keyLen);
++    }
++
++    public SymmetricKey
++    unwrapSymmetricPerm(byte[] wrapped, SymmetricKey.Type type, int keyLen)
++        throws TokenException, IllegalStateException,
++            InvalidAlgorithmParameterException
++    {
++        return unwrapSymmetricPerm(wrapped, type, -1, keyLen);
++    }
++
+     private SymmetricKey
+-    unwrapSymmetric(byte[] wrapped, SymmetricKey.Type type,
++    unwrapSymmetricPerm(byte[] wrapped, SymmetricKey.Type type,
+         int usageEnum, int keyLen)
+         throws TokenException, IllegalStateException,
+             InvalidAlgorithmParameterException
+@@ -508,6 +525,10 @@ final class PK11KeyWrapper implements Ke
+             throw new IllegalStateException();
+         }
+ 
++        /* Since we want permanent,make the temporary arg false */
++        boolean temporary = false;
++
++
+         if( (! algorithm.isPadded()) && (type == SymmetricKey.RC4) ) {
+             if( keyLen <= 0 ) {
+                 throw new InvalidAlgorithmParameterException(
+@@ -521,12 +542,53 @@ final class PK11KeyWrapper implements Ke
+ 
+         if( algorithm == KeyWrapAlgorithm.PLAINTEXT ) {
+             return nativeUnwrapSymPlaintext(token, wrapped, algFromType(type),
+-                usageEnum );
++                usageEnum,temporary );
+         } else {
+             if( symKey != null ) {
+                 Assert._assert(pubKey==null && privKey==null);
+                 return nativeUnwrapSymWithSym(token, symKey, wrapped, algorithm,
+-                        algFromType(type), keyLen, IV, usageEnum);
++                        algFromType(type), keyLen, IV, usageEnum,temporary);
++            } else {
++                Assert._assert(privKey!=null && pubKey==null && symKey==null);
++                throw new TokenException("We do not support permnament unwrapping with private key.");
++            }
++        }
++    }
++
++
++    private SymmetricKey
++    unwrapSymmetric(byte[] wrapped, SymmetricKey.Type type,
++        int usageEnum, int keyLen)
++        throws TokenException, IllegalStateException,
++            InvalidAlgorithmParameterException
++    {
++        if( state != UNWRAP ) {
++            throw new IllegalStateException();
++        }
++
++        if( (! algorithm.isPadded()) && (type == SymmetricKey.RC4) ) {
++            if( keyLen <= 0 ) {
++                throw new InvalidAlgorithmParameterException(
++                    "RC4 keys wrapped in unpadded algorithms need key length"+
++                    " specified when unwrapping");
++            }
++        } else {
++            // Don't use the key length
++            //keyLen = 0;
++        }
++
++        /* Since we DONT want permanent,make the temporary arg true */
++        boolean temporary = true;
++
++
++        if( algorithm == KeyWrapAlgorithm.PLAINTEXT ) {
++            return nativeUnwrapSymPlaintext(token, wrapped, algFromType(type),
++                usageEnum, temporary );
++        } else {
++            if( symKey != null ) {
++                Assert._assert(pubKey==null && privKey==null);
++                return nativeUnwrapSymWithSym(token, symKey, wrapped, algorithm,
++                        algFromType(type), keyLen, IV, usageEnum,temporary);
+             } else {
+                 Assert._assert(privKey!=null && pubKey==null && symKey==null);
+                 return nativeUnwrapSymWithPriv(token, privKey, wrapped,
+@@ -586,7 +648,7 @@ final class PK11KeyWrapper implements Ke
+     private static native SymmetricKey
+     nativeUnwrapSymWithSym(PK11Token token, SymmetricKey unwrappingKey,
+         byte[] wrappedKey, KeyWrapAlgorithm alg, Algorithm type, int keyLen,
+-        byte[] IV, int usageEnum)
++        byte[] IV, int usageEnum,boolean temporary)
+             throws TokenException;
+ 
+     /**
+@@ -600,7 +662,7 @@ final class PK11KeyWrapper implements Ke
+ 
+     private static native SymmetricKey
+     nativeUnwrapSymPlaintext(PK11Token token, byte[] wrappedKey,
+-        Algorithm type, int usageEnum);
++        Algorithm type, int usageEnum,boolean temporary);
+ 
+     private void reset() {
+         state = UNINITIALIZED;
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11MessageDigest.c.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11MessageDigest.c
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11MessageDigest.c.jmagne	2016-05-06 18:10:04.531912407 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11MessageDigest.c	2016-05-06 17:36:19.913933639 -0700
+@@ -99,17 +99,19 @@ Java_org_mozilla_jss_pkcs11_PK11MessageD
+     }
+ 
+     /* copy the key, setting the CKA_SIGN attribute */
+-    newKey = PK11_CopySymKeyForSigning(origKey, mech);
++/*    newKey = PK11_CopySymKeyForSigning(origKey, mech);
+     if( newKey == NULL ) {
+         JSS_throwMsg(env, DIGEST_EXCEPTION,
+                         "Unable to set CKA_SIGN attribute on symmetric key");
+         goto finish;
+     }
+ 
++*/
++
+     param.data = NULL;
+     param.len = 0;
+ 
+-    context = PK11_CreateContextBySymKey(mech, CKA_SIGN, newKey, &param);
++    context = PK11_CreateContextBySymKey(mech, CKA_SIGN, origKey, &param);
+     if( context == NULL ) {
+         JSS_throwMsg(env, DIGEST_EXCEPTION,
+             "Unable to initialize digest context");
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Store.c.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Store.c
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Store.c.jmagne	2016-04-14 16:22:16.174394977 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Store.c	2016-04-14 16:22:26.605323176 -0700
+@@ -44,13 +44,101 @@
+ #include <cert.h>
+ #include <certdb.h>
+ #include <secasn1.h>
+-
+ #include <jssutil.h>
+ #include <Algorithm.h>
+ #include "pk11util.h"
+ #include <java_ids.h>
+ #include <jss_exceptions.h>
+ 
++typedef struct
++{
++    enum
++    {
++        PW_NONE = 0,
++        PW_FROMFILE = 1,
++        PW_PLAINTEXT = 2,
++        PW_EXTERNAL = 3
++    } source;
++    char *data;
++} secuPWData;
++
++/**********************************************************************
++ * PK11Store.putSymKeysInVector
++ */
++JNIEXPORT void JNICALL
++Java_org_mozilla_jss_pkcs11_PK11Store_putSymKeysInVector
++    (JNIEnv *env, jobject this, jobject keyVector)
++{
++    PK11SlotInfo *slot;
++    jobject object = NULL;
++    jclass vectorClass;
++    jmethodID addElement;
++
++    PK11SymKey *firstSymKey= NULL;
++    PK11SymKey *sk  = NULL;
++    PK11SymKey *nextSymKey = NULL;
++    secuPWData  pwdata;
++
++    PK11SymKey *freeSymKey = NULL;
++    PK11SymKey *nextFreeSymKey = NULL;
++
++    pwdata.source   = PW_NONE;
++    pwdata.data     = (char *) NULL;
++
++    PR_ASSERT(env!=NULL && this!=NULL && keyVector!=NULL);
++
++    if( JSS_PK11_getStoreSlotPtr(env, this, &slot) != PR_SUCCESS) {
++        ASSERT_OUTOFMEM(env);
++        goto finish;
++    }
++    PR_ASSERT(slot!=NULL);
++
++    vectorClass = (*env)->GetObjectClass(env, keyVector);
++    if(vectorClass == NULL) {
++        ASSERT_OUTOFMEM(env);
++        goto finish;
++    }
++
++    addElement = (*env)->GetMethodID(env,
++                                     vectorClass,
++                                     VECTOR_ADD_ELEMENT_NAME,
++                                     VECTOR_ADD_ELEMENT_SIG);
++    if(addElement == NULL) {
++        ASSERT_OUTOFMEM(env);
++        goto finish;
++    }
++
++    PK11_Authenticate(slot, PR_TRUE /*load certs*/, NULL /*wincx*/);
++
++    /* Obtain the symmetric key list. */
++    firstSymKey = PK11_ListFixedKeysInSlot( slot , NULL, ( void *) &pwdata );
++    sk = firstSymKey;
++
++    while(( sk != NULL ))
++    {
++        if( sk ) {
++
++            nextSymKey = sk;
++            object = JSS_PK11_wrapSymKey(env, &sk);
++
++            if(object == NULL) {
++                PR_ASSERT( (*env)->ExceptionOccurred(env) );
++                goto finish;
++            }
++
++            /***************************************************
++            * Insert the key into the vector
++            ***************************************************/
++            (*env)->CallVoidMethod(env, keyVector, addElement, object);
++        }
++
++        sk = PK11_GetNextSymKey( nextSymKey );
++    }
++
++finish:
++
++    return;
++}
+ 
+ /**********************************************************************
+  * PK11Store.putKeysInVector
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Store.java.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Store.java
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Store.java.jmagne	2016-04-14 16:23:26.997907471 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Store.java	2016-04-14 16:23:34.435856272 -0700
+@@ -66,8 +66,23 @@ public final class PK11Store implements
+         keys.copyInto( (Object[]) array );
+         return array;
+     }
++
++    public synchronized SymmetricKey[]
++    getSymmetricKeys() throws TokenException {
++
++        Vector keys = new Vector();
++        putSymKeysInVector(keys);
++        SymmetricKey[] array = new SymmetricKey[keys.size()];
++        keys.copyInto( (Object[]) array);
++        return array;
++    }
++
++
++
+     protected native void putKeysInVector(Vector keys) throws TokenException;
+ 
++    protected native void putSymKeysInVector(Vector symKeys) throws TokenException;
++
+ 
+     public native void deletePrivateKey(PrivateKey key)
+         throws NoSuchItemOnTokenException, TokenException;
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymKey.c.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymKey.c
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymKey.c.jmagne	2016-04-14 16:24:44.565372557 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymKey.c	2016-05-17 11:37:48.532485104 -0700
+@@ -33,7 +33,6 @@
+  * the terms of any one of the MPL, the GPL or the LGPL.
+  *
+  * ***** END LICENSE BLOCK ***** */
+-
+ #include "_jni/org_mozilla_jss_pkcs11_SymKeyProxy.h"
+ 
+ #include <nspr.h>
+@@ -62,6 +61,8 @@ JSS_PK11_wrapSymKey(JNIEnv *env, PK11Sym
+     jmethodID constructor;
+     jbyteArray ptrArray;
+     jobject Key=NULL;
++    char *nickname = NULL;
++    jstring jnickname = NULL;
+ 
+     PR_ASSERT(env!=NULL && symKey!=NULL && *symKey!=NULL);
+ 
+@@ -72,10 +73,17 @@ JSS_PK11_wrapSymKey(JNIEnv *env, PK11Sym
+         goto finish;
+     }
+ 
++    nickname = PK11_GetSymKeyNickname( *symKey );
++
++    if (nickname) {
++        jnickname = (*env)->NewStringUTF(env, nickname);
++    }
++
++ 
+     /* find the constructor */
+     constructor = (*env)->GetMethodID(env, keyClass,
+                                         PLAIN_CONSTRUCTOR,
+-                                        PK11SYMKEY_CONSTRUCTOR_SIG);
++                                        PK11SYMKEY_CONSTRUCTOR_1_SIG);
+     if(constructor == NULL) {
+         ASSERT_OUTOFMEM(env);
+         goto finish;
+@@ -87,12 +95,16 @@ JSS_PK11_wrapSymKey(JNIEnv *env, PK11Sym
+         goto finish;
+     }
+     /* call the constructor */
+-    Key = (*env)->NewObject(env, keyClass, constructor, ptrArray);
++    Key = (*env)->NewObject(env, keyClass, constructor, ptrArray,jnickname);
+ 
+ finish:
+     if(Key == NULL) {
+         PK11_FreeSymKey(*symKey);
+     }
++    if(nickname != NULL) {
++        PORT_Free(nickname);
++        nickname = NULL;
++    }
+     *symKey = NULL;
+     return Key;
+ }
+@@ -181,6 +193,49 @@ finish:
+ 
+ /***********************************************************************
+  *
++ * PK11SymKey.setNickNameNative
++ */
++JNIEXPORT void JNICALL
++Java_org_mozilla_jss_pkcs11_PK11SymKey_setNickNameNative
++    (JNIEnv *env, jobject this,jstring nickname)
++{
++    PK11SymKey *key=NULL;
++    const char *keyname = NULL;
++    SECStatus status;
++
++    /* If no nickname provided, we are done */
++    if( nickname == NULL ) {
++        JSS_throwMsgPrErr(env, TOKEN_EXCEPTION,
++            "Nickname is NULL, will not be set");        
++        goto finish;
++    }
++
++    /* get the key pointer */
++    if( JSS_PK11_getSymKeyPtr(env, this, &key) != PR_SUCCESS) {
++        goto finish;
++    }
++
++    /* convert the Java String into a native "C" string */
++    keyname = (*env)->GetStringUTFChars( env, nickname, 0 );
++
++    /* name the key */
++    status = PK11_SetSymKeyNickname( key, keyname );
++    if( status != SECSuccess ) {
++        JSS_throwMsgPrErr(env, TOKEN_EXCEPTION,
++            "Failed to name symmetric key");
++    }
++finish:
++
++    if( keyname != NULL ) {
++        /* free the native "C" string */
++        (*env)->ReleaseStringUTFChars(env, nickname, keyname);
++    }
++
++    return;
++}
++
++/***********************************************************************
++ *
+  * PK11SymKey.getKeyData
+  */
+ JNIEXPORT jbyteArray JNICALL
+@@ -279,6 +334,10 @@ Java_org_mozilla_jss_pkcs11_PK11SymKey_g
+           case CKK_AES:
+             typeFieldName = AES_KEYTYPE_FIELD;
+             break;
++          case CKK_DES2:
++             printf("hello des2! \n");
++             typeFieldName = DES3_KEYTYPE_FIELD;
++             break;
+           default:
+             PR_ASSERT(PR_FALSE);
+             typeFieldName = DES_KEYTYPE_FIELD;
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymKey.java.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymKey.java
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymKey.java.jmagne	2016-04-14 16:58:33.385371633 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymKey.java	2016-05-17 11:41:36.323841045 -0700
+@@ -44,9 +44,17 @@ public final class PK11SymKey implements
+     protected PK11SymKey(byte[] pointer) {
+         Assert._assert(pointer!=null);
+         keyProxy  = new SymKeyProxy(pointer);
++        nickName = null;
++    }
++
++    protected PK11SymKey(byte[] pointer,String nickName) {
++        Assert._assert(pointer!=null);
++        keyProxy  = new SymKeyProxy(pointer);
++        this.nickName = nickName;
+     }
+ 
+     private SymKeyProxy keyProxy;
++    private String nickName;
+ 
+     public SymmetricKey.Type getType() {
+         KeyType kt = getKeyType();
+@@ -108,6 +116,20 @@ public final class PK11SymKey implements
+     public String getFormat() {
+         return "RAW";
+     }
++
++    public String getNickName() {
++        return nickName;
++    }
++
++    public void setNickName(String nickName) {
++        this.nickName = nickName;
++
++        if( nickName != null) {
++            setNickNameNative(nickName);
++        }
++    }
++
++    public native void setNickNameNative(String nickName);
+ }
+ 
+ class SymKeyProxy extends KeyProxy {
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymmetricKeyDeriver.c.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymmetricKeyDeriver.c
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymmetricKeyDeriver.c.jmagne	2016-04-14 16:26:18.611723763 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymmetricKeyDeriver.c	2016-05-17 14:13:35.456574082 -0700
+@@ -0,0 +1,364 @@
++/* ***** BEGIN LICENSE BLOCK *****
++ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
++ *
++ * The contents of this file are subject to the Mozilla Public License Version
++ * 1.1 (the "License"); you may not use this file except in compliance with
++ * the License. You may obtain a copy of the License at
++ * http://www.mozilla.org/MPL/
++ *
++ * Software distributed under the License is distributed on an "AS IS" basis,
++ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
++ * for the specific language governing rights and limitations under the
++ * License.
++ *
++ * The Original Code is the Netscape Security Services for Java.
++ *
++ * The Initial Developer of the Original Code is
++ * Netscape Communications Corporation.
++ * Portions created by the Initial Developer are Copyright (C) 1998-2000
++ * the Initial Developer. All Rights Reserved.
++ *
++ * Contributor(s):
++ *
++ * Alternatively, the contents of this file may be used under the terms of
++ * either the GNU General Public License Version 2 or later (the "GPL"), or
++ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
++ * in which case the provisions of the GPL or the LGPL are applicable instead
++ * of those above. If you wish to allow use of your version of this file only
++ * under the terms of either the GPL or the LGPL, and not to allow others to
++ * use your version of this file under the terms of the MPL, indicate your
++ * decision by deleting the provisions above and replace them with the notice
++ * and other provisions required by the GPL or the LGPL. If you do not delete
++ * the provisions above, a recipient may use your version of this file under
++ * the terms of any one of the MPL, the GPL or the LGPL.
++ *
++ * ***** END LICENSE BLOCK ***** */
++#include "_jni/org_mozilla_jss_pkcs11_PK11SymmetricKeyDeriver.h"
++#include <plarena.h>
++#include <secmodt.h>
++#include <pk11func.h>
++#include <pk11pqg.h>
++#include <secerr.h>
++#include <nspr.h>
++#include <key.h>
++#include <secasn1.h>
++#include <base64.h>
++#include <cert.h>
++#include <cryptohi.h>
++
++#include <jssutil.h>
++#include <jss_exceptions.h>
++#include <jss_bigint.h>
++#include <Algorithm.h>
++#include <jni.h>
++#include <secitem.h>
++#include "java_ids.h"
++
++#include "pk11util.h"
++#include <plstr.h>
++
++/***********************************************************************
++ * Expose the NSS functionality at low level, one should know what to do
++ * at the Java level. 
++ */
++
++JNIEXPORT jobject JNICALL Java_org_mozilla_jss_pkcs11_PK11SymmetricKeyDeriver_nativeDeriveSymKey
++  (JNIEnv * env, jobject this,jobject tokenObj, 
++  jobject baseKeyObj, jobject secondaryKeyObj, 
++  jlong deriveMechanism, jbyteArray param, jbyteArray iv, jlong targetMechanism, jlong operation, jlong keySize)
++{
++    jobject keyObj = NULL;
++    PK11SlotInfo *slot=NULL;
++    PK11SlotInfo *bestSlot = NULL;
++    PK11SlotInfo *slotForKey = NULL;
++    PK11SlotInfo *slotForSecondaryKey = NULL;
++    PK11SlotInfo *finalSlot = NULL;
++    PK11SlotInfo *finalSecondarySlot = NULL;
++    PK11SlotInfo *finalBaseKeySlot = NULL;
++
++    PK11SymKey *baseKey = NULL;
++    PK11SymKey *bestBaseKey = NULL;
++    PK11SymKey *finalBaseKey = NULL;
++    PK11SymKey *newKey = NULL;
++
++    PK11SymKey *secondaryKey = NULL;
++    PK11SymKey *bestSecondaryKey = NULL;
++    PK11SymKey *finalSecondaryKey = NULL;
++    PK11SymKey *derivedKey = NULL;
++    jbyte *paramValue = NULL;
++    int paramLength = 0;
++    jbyte *ivValue = NULL;
++    int ivLength = 0;
++
++
++    CK_OBJECT_HANDLE keyhandle = 0;
++
++    CK_AES_CBC_ENCRYPT_DATA_PARAMS aes;
++    CK_DES_CBC_ENCRYPT_DATA_PARAMS des;
++    CK_KEY_DERIVATION_STRING_DATA string;
++
++    SECItem paramsItem = { siBuffer, NULL, 0 };
++
++    PR_ASSERT(env!=NULL && this!=NULL);
++
++    if( baseKeyObj == 0) {
++        PR_fprintf(PR_STDOUT,"baseKeyObj can not be null!\n");
++        goto loser;
++    }
++
++    if( param != NULL) {
++        paramValue = (*env)->GetByteArrayElements(env,param, NULL);
++        paramLength = (*env)->GetArrayLength(env,param);
++    }
++
++    if( iv != NULL) {
++        ivValue = (*env)->GetByteArrayElements(env,iv, NULL);
++        ivLength = (*env)->GetArrayLength(env,iv);
++    }
++
++    /* Set up the params data for the PK11_Derive family */
++
++    switch ( deriveMechanism ) {
++        case CKM_DES_ECB_ENCRYPT_DATA:
++        case CKM_DES3_ECB_ENCRYPT_DATA:
++        case CKM_AES_ECB_ENCRYPT_DATA:
++        case CKM_CAMELLIA_ECB_ENCRYPT_DATA:
++        case CKM_SEED_ECB_ENCRYPT_DATA:
++        /* Use CK_KEY_DERIVATION_STRING_DATA */ 
++
++            string.pData = (unsigned char *) paramValue;
++            string.ulLen = paramLength;
++            paramsItem.data = (void *) &string;
++            paramsItem.len = sizeof(string);
++
++        break;
++        case CKM_DES_CBC_ENCRYPT_DATA:
++        case CKM_DES3_CBC_ENCRYPT_DATA:
++        /* Use CK_DES_CBC_ENCRYPT_DATA_PARAMS */
++    
++            if( ivValue == NULL) {
++               PR_fprintf(PR_STDOUT, "Need iv param for CKM_DES_CBC_ENCRYPT_DATA or CKM_DES3_CBC_ENCRYPT_DATA. \n");
++               goto loser;
++            }
++
++             if( ivLength != 8) {
++               PR_fprintf(PR_STDOUT, "Need iv param for CKM_DES_CBC_ENCRYPT_DATA  structure to be 8 bytes!. \n");
++               goto loser;
++            }
++
++            des.pData = (unsigned char *) paramValue;
++            des.length = paramLength;
++            PORT_Memcpy(des.iv,ivValue,ivLength);
++            paramsItem.data = (void *) &des;
++            paramsItem.len = sizeof(des);
++    
++        break;
++
++        case CKM_AES_CBC_ENCRYPT_DATA:
++        case CKM_CAMELLIA_CBC_ENCRYPT_DATA:
++        case CKM_SEED_CBC_ENCRYPT_DATA:
++        /* Use CK_AES_CBC_ENCRYPT_DATA_PARAMS */
++            
++            if ( ivValue == NULL ) {
++                PR_fprintf(PR_STDOUT, "Need iv param for CBC encrypt derive for AES, or CAMELLIA or SEED. \n");
++                goto loser;
++            }
++
++            if( ivLength != 16) {
++                PR_fprintf(PR_STDOUT, "Need iv param for CK_AES_CBC_ENCRYPT_DATA_PARAMS structure to be 16 bytes!. \n");
++                goto loser;
++            }
++
++            aes.pData = (unsigned char *) paramValue;
++            aes.length = paramLength;
++            PORT_Memcpy(aes.iv,ivValue,ivLength);
++            paramsItem.data = (void *) &aes;
++            paramsItem.len = sizeof(aes);
++        break;
++        default:
++            paramsItem.data = (unsigned char *) paramValue;
++            paramsItem.len = paramLength;
++        break;
++    }
++
++    /* Get slot */
++    if( JSS_PK11_getTokenSlotPtr(env, tokenObj, &slot) != PR_SUCCESS) {
++        goto loser;
++    }
++
++    /* Get base key */
++
++    if( JSS_PK11_getSymKeyPtr(env, baseKeyObj, &baseKey) != PR_SUCCESS) {
++        PR_fprintf(PR_STDOUT, "PK11SymmetricKeyDeriver.nativeDeriveSymKey: Unable to extract symmetric base key!");
++        goto loser;
++    }
++
++    /* Ask NSS what the best slot for the given mechanism */
++
++    bestSlot = PK11_GetBestSlot(deriveMechanism, NULL);
++
++    if( bestSlot == NULL) {
++        PR_fprintf(PR_STDOUT,"PK11SymmetricKeyDeriver.nativeDeriveSymKey: Can't find suitable slot for sym key derivation! \n");
++        goto loser;
++    }
++
++    slotForKey = PK11_GetSlotFromKey(baseKey);
++
++    int keyOnRequestedSlot = 0;
++    int baseKeyMoved= 0;
++
++    if(slotForKey != slot) {
++        keyOnRequestedSlot = 0;
++    }  else {
++        keyOnRequestedSlot = 1;
++        finalBaseKeySlot = slot;
++    } 
++
++    if ( PK11_DoesMechanism( slot, deriveMechanism)) {
++        if ( keyOnRequestedSlot ) {
++            finalBaseKey = baseKey;
++        } else {
++            bestBaseKey = PK11_MoveSymKey( slot, CKA_ENCRYPT, 0, PR_FALSE, baseKey );
++            if(bestBaseKey == NULL) {
++                PR_fprintf(PR_STDOUT,"PK11SymmetricKeyDeriver.nativeDeriveSymKey:  Can't move Base Key to requested slot!\n");
++                goto loser;
++            }
++            baseKeyMoved = 1;
++            finalBaseKey = bestBaseKey;
++            finalBaseKeySlot = slot;
++        }
++
++    } else {
++            bestBaseKey = PK11_MoveSymKey( bestSlot, CKA_ENCRYPT, 0, PR_FALSE, baseKey );
++            if(bestBaseKey == NULL) {
++                PR_fprintf(PR_STDOUT,"PK11SymmetricKeyDeriver.nativeDeriveSymKey:  Can't move Base Key to best slot!\n");
++                goto loser;
++            }
++            baseKeyMoved = 1;
++            finalBaseKey = bestBaseKey;
++            finalBaseKeySlot = bestSlot;
++    }
++
++    /* Assume we want to do a concatenation family here */
++
++    if( secondaryKeyObj != NULL) {
++        if( JSS_PK11_getSymKeyPtr(env, secondaryKeyObj, &secondaryKey) != PR_SUCCESS) {
++            PR_fprintf(PR_STDOUT,"PK11SymmetricKeyDeriver.nativeDeriveSymKey:  Can't find secondary sym key!\n");
++            goto loser;
++        }
++
++        /* Make sure the secondary key is in the proper slot to do concatenation */
++
++        slotForSecondaryKey = PK11_GetSlotFromKey( secondaryKey );
++
++        if( finalBaseKeySlot != slotForSecondaryKey ) {
++
++            finalSecondaryKey = PK11_MoveSymKey (finalBaseKeySlot, CKA_ENCRYPT, 0, PR_FALSE, secondaryKey);
++
++            if( finalSecondaryKey == NULL) {
++                PR_fprintf(PR_STDOUT,"PK11SymmetricKeyDeriver.nativeDeriveSymKey, Problem moving secondary key to proper slot.\n");
++                goto loser;
++            }
++        } else {
++            finalSecondaryKey = secondaryKey;
++        }
++
++        if( paramValue == NULL) {
++            keyhandle = PK11_GetSymKeyHandle(finalSecondaryKey);
++
++            if( keyhandle == 0) {
++                PR_fprintf(PR_STDOUT,"PK11SymmetricKeyDeriver.nativeDeriveSymKey, can't get handle for secondary sym key.\n");
++                goto loser;
++            }
++
++            paramsItem.data=(unsigned char *) &keyhandle;
++            paramsItem.len=sizeof(keyhandle);
++
++        } else {
++            PR_fprintf(PR_STDOUT,"PK11SymmetricKeyDeriver.nativeDeriveSymKey: incorrect input parameter provided!\n");
++            goto loser;
++        }
++    }
++
++    derivedKey = PK11_Derive(finalBaseKey, deriveMechanism, &paramsItem, targetMechanism,
++                                                            operation, keySize);
++    if(derivedKey == NULL) {
++        PR_fprintf(PR_STDOUT,
++                    "ERROR: Can't derive symmetric key, error: %d \n",PR_GetError());
++        goto loser;
++    }
++
++    if ( (finalSlot =  PK11_GetSlotFromKey(derivedKey )) != slot) {
++        newKey =  PK11_MoveSymKey ( slot, CKA_ENCRYPT, 0, PR_FALSE, derivedKey);
++
++        if ( newKey == NULL ) {
++            PR_fprintf(PR_STDOUT,"PK11SymmetricKeyDeriver.nativeDeriveSymKey: error moving key to original slot, return anyway. \n");
++            newKey = derivedKey;
++            derivedKey = NULL;
++        }
++       
++    }  else {
++        newKey = derivedKey;
++        derivedKey = NULL;
++    }
++
++    keyObj = JSS_PK11_wrapSymKey(env, &newKey);
++
++loser:
++
++    if ( bestBaseKey != NULL ) {
++       PK11_FreeSymKey ( bestBaseKey );
++       bestBaseKey = NULL;
++    }
++
++    if ( bestSecondaryKey != NULL ) {
++       PK11_FreeSymKey ( bestSecondaryKey );
++       bestSecondaryKey = NULL;
++    }
++
++    if ( derivedKey != NULL) {
++      PK11_FreeSymKey ( derivedKey );
++      derivedKey = NULL;
++    }
++
++    if (bestSlot != NULL ) {
++       PK11_FreeSlot(bestSlot);
++       bestSlot = NULL;
++    }
++
++    if ( slotForKey != NULL ) {
++       PK11_FreeSlot( slotForKey );
++       slotForKey = NULL;
++    }
++
++    if ( finalSlot != NULL ) {
++       PK11_FreeSlot( finalSlot );
++       finalSlot = NULL;
++    }
++
++    if ( finalSecondarySlot != NULL ) {
++       PK11_FreeSlot( finalSecondarySlot );
++       finalSecondarySlot = NULL;
++    }
++
++    if ( slotForSecondaryKey != NULL ) {
++       PK11_FreeSlot( slotForSecondaryKey );
++       slotForSecondaryKey = NULL;
++    }
++
++    if(paramValue) {
++        (*env)->ReleaseByteArrayElements(env, param, (jbyte*)paramValue,
++                                                              JNI_ABORT);
++    }
++    if(ivValue) {
++        (*env)->ReleaseByteArrayElements(env, iv, (jbyte*)ivValue,
++                                                        JNI_ABORT);
++    }
++
++    if( keyObj == NULL) {
++        JSS_throwMsgPrErr(env, TOKEN_EXCEPTION, "Unable to derive symmetric key! "
++                 "failure!");
++    }
++
++    return keyObj; 
++}
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymmetricKeyDeriver.java.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymmetricKeyDeriver.java
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymmetricKeyDeriver.java.jmagne	2016-04-14 16:28:29.179823017 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11SymmetricKeyDeriver.java	2016-04-14 16:28:36.186774680 -0700
+@@ -0,0 +1,158 @@
++/* ***** BEGIN LICENSE BLOCK *****
++ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
++ *
++ * The contents of this file are subject to the Mozilla Public License Version
++ * 1.1 (the "License"); you may not use this file except in compliance with
++ * the License. You may obtain a copy of the License at
++ * http://www.mozilla.org/MPL/
++ *
++ * Software distributed under the License is distributed on an "AS IS" basis,
++ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
++ * for the specific language governing rights and limitations under the
++ * License.
++ *
++ * The Original Code is the Netscape Security Services for Java.
++ *
++ * The Initial Developer of the Original Code is
++ * Netscape Communications Corporation.
++ * Portions created by the Initial Developer are Copyright (C) 1998-2000
++ * the Initial Developer. All Rights Reserved.
++ *
++ * Contributor(s):
++ *
++ * Alternatively, the contents of this file may be used under the terms of
++ * either the GNU General Public License Version 2 or later (the "GPL"), or
++ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
++ * in which case the provisions of the GPL or the LGPL are applicable instead
++ * of those above. If you wish to allow use of your version of this file only
++ * under the terms of either the GPL or the LGPL, and not to allow others to
++ * use your version of this file under the terms of the MPL, indicate your
++ * decision by deleting the provisions above and replace them with the notice
++ * and other provisions required by the GPL or the LGPL. If you do not delete
++ * the provisions above, a recipient may use your version of this file under
++ * the terms of any one of the MPL, the GPL or the LGPL.
++ *
++ * ***** END LICENSE BLOCK ***** */
++
++package org.mozilla.jss.pkcs11;
++
++import org.mozilla.jss.crypto.*;
++import org.mozilla.jss.util.Assert;
++import sun.security.pkcs11.wrapper.*;
++import java.security.InvalidKeyException;
++
++
++/*This operation is pkcs11 based only */
++
++public class PK11SymmetricKeyDeriver implements SymmetricKeyDeriver {
++
++    private PK11Token token = null;
++    private SymmetricKey baseKey = null;
++    private SymmetricKey secondaryKey = null;
++    private long deriveMechanism = 0;
++    private long targetMechanism = 0;
++    private long operation = 0;
++    private long keySize = 0;
++    private byte[] param = null;
++    private byte[] iv = null;
++
++    public PK11SymmetricKeyDeriver(PK11Token token)
++    {
++        this.token = token;
++    }
++
++    /* Use with the encrypt type mechanisms 
++
++    Example: initDerive(
++                    symKey, (PKCS11Constants.CKM_DES3_ECB_ENCRYPT_DATA) 4354L, derivationData, null,
++                    PKCS11Constants.CKM_DES3_ECB, PKCS11Constants.CKA_DERIVE, 16);
++
++
++   */
++    public void initDerive(SymmetricKey baseKey, long deriveMech, byte[] param, byte[] iv, 
++                              long targetMech, long operation, long keySize) throws InvalidKeyException
++    {
++        reset();
++
++        if(baseKey == null) {
++            throw new InvalidKeyException("Key is null");
++        }
++
++        this.baseKey = baseKey;
++        this.deriveMechanism = deriveMech;
++        this.targetMechanism = targetMech;
++        this.operation = operation;
++
++        if ( param != null) {
++            this.param = new byte[param.length];
++            System.arraycopy(param,0,this.param,0,param.length);
++        }
++
++        if ( iv != null) {
++            this.iv = new byte[iv.length];
++            System.arraycopy(iv,0,this.iv,0,iv.length);
++        }
++
++        this.keySize = keySize;
++
++    }
++
++    /* Use with key extraction and key concatanation mechanisms
++       
++    Example Extraction:
++       param: byte array that has the bit position of where to extract
++     initDerive(
++                derivedKey, PKCS11Constants.CKM_EXTRACT_KEY_FROM_KEY,param,null,
++                PKCS11Constants.CKA_ENCRYPT, PKCS11Constants.CKA_DERIVE,8);
++
++    Example Concat:
++
++    initDerive(
++               baseSymKey,secondarySymKey, PKCS11Constants.CKM_CONCATENATE_BASE_AND_KEY,null,null,
++               PKCS11Constants.CKM_DES3_ECB, PKCS11Constants.CKA_DERIVE,0);
++
++    */ 
++
++    public void initDerive(SymmetricKey baseKey, SymmetricKey secondaryKey, long deriveMech, 
++        byte[] param, byte[] iv, long targetMech, long operation, long keySize) throws InvalidKeyException
++    {
++        reset();
++
++        if ( baseKey == null || secondaryKey == null) {
++            throw new InvalidKeyException("Key is null");
++        }
++
++        initDerive(baseKey, deriveMech, param,iv,targetMech,operation,keySize);
++        this.secondaryKey = secondaryKey;
++
++    }
++
++
++    public SymmetricKey derive()
++         throws TokenException
++    {
++        SymmetricKey result = deriveSymKey(this.baseKey,this.secondaryKey,this.deriveMechanism, this.param, this.iv, this.targetMechanism, this.operation,this.keySize);
++        return result;
++    }
++
++    private SymmetricKey
++    deriveSymKey(SymmetricKey baseKey, SymmetricKey secondaryKey, long deriveMechanism, byte[] param, byte[] iv, long targetMechanism, long operation, long keySize)
++        throws TokenException, IllegalStateException
++    {
++        return nativeDeriveSymKey(token, baseKey, secondaryKey,deriveMechanism, param, iv, targetMechanism, operation, keySize);
++    }
++
++    public native SymmetricKey nativeDeriveSymKey(PK11Token token, SymmetricKey baseKey, SymmetricKey secondaryKey, long deriveMechanism, byte[] param, byte[] iv,
++        long targetMechanism, long operation, long keySize);
++
++    private void reset() {
++        baseKey = null;
++        secondaryKey = null;
++        deriveMechanism = 0;
++        targetMechanism = 0;
++        operation = 0;
++        keySize = 0;
++        param = null;
++        iv = null;
++   }
++}
+diff -up ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Token.java.jmagne ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Token.java
+--- ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Token.java.jmagne	2016-04-14 16:30:46.098878459 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Token.java	2016-04-14 17:27:30.918367372 -0700
+@@ -131,6 +131,11 @@ public final class PK11Token implements
+         return PK11KeyGenerator.clone(key, this);
+     }
+ 
++    public PK11SymmetricKeyDeriver getSymmetricKeyDeriver()
++    {
++         return new PK11SymmetricKeyDeriver(this);
++    }
++
+     public KeyWrapper
+     getKeyWrapper(KeyWrapAlgorithm algorithm)
+         throws NoSuchAlgorithmException, TokenException
+diff -up ./mozilla/security/jss/org/mozilla/jss/tests/SymKeyDeriving.java.jmagne ./mozilla/security/jss/org/mozilla/jss/tests/SymKeyDeriving.java
+--- ./mozilla/security/jss/org/mozilla/jss/tests/SymKeyDeriving.java.jmagne	2016-04-14 16:32:58.529964860 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/tests/SymKeyDeriving.java	2016-05-17 11:43:51.858862556 -0700
+@@ -0,0 +1,516 @@
++/* ***** BEGIN LICENSE BLOCK *****
++ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
++ *
++ * The contents of this file are subject to the Mozilla Public License Version
++ * 1.1 (the "License"); you may not use this file except in compliance with
++ * the License. You may obtain a copy of the License at
++ * http://www.mozilla.org/MPL/
++ *
++ * Software distributed under the License is distributed on an "AS IS" basis,
++ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
++ * for the specific language governing rights and limitations under the
++ * License.
++ *
++ * The Original Code is the Netscape Security Services for Java.
++ *
++ * The Initial Developer of the Original Code is
++ * Netscape Communications Corporation.
++ * Portions created by the Initial Developer are Copyright (C) 1998-2000
++ * the Initial Developer. All Rights Reserved.
++ *
++ * Contributor(s):
++ *
++ * Alternatively, the contents of this file may be used under the terms of
++ * either the GNU General Public License Version 2 or later (the "GPL"), or
++ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
++ * in which case the provisions of the GPL or the LGPL are applicable instead
++ * of those above. If you wish to allow use of your version of this file only
++ * under the terms of either the GPL or the LGPL, and not to allow others to
++ * use your version of this file under the terms of the MPL, indicate your
++ * decision by deleting the provisions above and replace them with the notice
++ * and other provisions required by the GPL or the LGPL. If you do not delete
++ * the provisions above, a recipient may use your version of this file under
++ * the terms of any one of the MPL, the GPL or the LGPL.
++ *
++ * ***** END LICENSE BLOCK ***** */
++
++package org.mozilla.jss.tests;
++
++import org.mozilla.jss.crypto.*;
++import org.mozilla.jss.CryptoManager;
++import org.mozilla.jss.util.Assert;
++import org.mozilla.jss.pkcs11.*;
++import sun.security.pkcs11.wrapper.PKCS11Constants;
++import java.nio.ByteBuffer;
++import java.util.Arrays;
++import java.util.Vector;
++import java.util.Enumeration;
++
++/**
++ * Sym Key deriving tests..
++ *
++ */
++
++public class SymKeyDeriving {
++
++      private static final byte[] iv8 = new byte [] { 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8 };
++      private static final byte[] iv16 = new byte [] { 0x1, 0x2, 0x3, 0x4, 
++                    0x5, 0x6, 0x7, 0x8,  
++                    0x9,0xa, 0xb, 0xc,0xd,0xe, 0xf,0x10 };
++
++      private static final byte[] derivationData1 = new byte[] { 0x11, 0x11, 0x13,
++          0x14, 0x15, 0x16, 0x17, 0x18 };
++
++      private static final byte[] derivationData2 = new byte [] { 0x9, 0xa, 0xb, 0xc, 0xd,
++          0xe, 0xf, 0x10 };
++
++      private static final byte[] derivationData16 = new byte[] { 0x1, 0x2, 0x3, 0x4, 0x5, 0x6,0x7, 0x8,
++          0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10 };
++
++
++    public static void main(String args[]) {
++
++      SymmetricKey macKeyDev = null;
++      try {
++
++        CryptoManager.InitializationValues vals =
++              new CryptoManager.InitializationValues("./"
++              );
++        CryptoManager.initialize(vals);
++        CryptoManager cm = CryptoManager.getInstance();
++        CryptoToken token = cm.getInternalCryptoToken();
++        CryptoToken keyToken = cm.getInternalKeyStorageToken();
++        System.out.println("interal token name: " + keyToken.getName());
++        KeyGenerator keyKg = keyToken.getKeyGenerator(KeyGenAlgorithm.DES3);
++        SymmetricKey baseKey = keyKg.generate();
++
++
++        KeyGenerator keyKgDes = keyToken.getKeyGenerator(KeyGenAlgorithm.DES);
++        SymmetricKey baseKeyDes = keyKgDes.generate();
++        System.out.println("strength: " + baseKeyDes.getStrength());
++
++
++        KeyGenerator keyKgAES = keyToken.getKeyGenerator(KeyGenAlgorithm.AES);
++        keyKgAES.initialize(128);
++        SymmetricKey baseKeyAES = keyKgAES.generate();
++
++
++
++        System.out.println("baseKey bytes: ");
++        byte[] baseBytes = baseKey.getEncoded();
++        displayByteArray(baseBytes,true); 
++
++
++        /*****************************************************************************************************/
++
++        System.out.println("\n Mechanism CKM_EXTRACT_KEY_FROM_KEY test 16 bytes. \n");
++
++
++        SymmetricKeyDeriver deriver = token.getSymmetricKeyDeriver();
++        System.out.println("deriver: " + deriver);
++        System.out.println("CKM_EXTRACT_KEY_FROM_KEY : " + PKCS11Constants.CKM_EXTRACT_KEY_FROM_KEY);
++
++        long bitPosition = 0;
++
++        byte[] param = longToBytes(bitPosition);
++
++        deriver.initDerive(
++                           baseKey, PKCS11Constants.CKM_EXTRACT_KEY_FROM_KEY,param,null, 
++                           PKCS11Constants.CKA_ENCRYPT, PKCS11Constants.CKA_DERIVE,(long) 16);
++
++
++        SymmetricKey extracted16 = deriver.derive();
++
++        System.out.println("Derived key: " + extracted16);
++
++        if(extracted16 == null) {
++            System.out.println("Failed to derive 16 byte key with mechanism: CKM_EXTRACT_KEY_FROM_KEY \n");
++        }
++
++        System.out.println("derivedKey 16 bytes: ");
++        byte[] derivedBytes = extracted16.getEncoded();
++        displayByteArray(derivedBytes,true);
++
++
++        /*****************************************************************************************************/
++
++        System.out.println("\n Mechanism CKM_EXTRACT_KEY_FROM_KEY test 8 bytes. \n");
++
++
++        SymmetricKeyDeriver extract8 = token.getSymmetricKeyDeriver();
++        extract8.initDerive(
++                           extracted16, PKCS11Constants.CKM_EXTRACT_KEY_FROM_KEY,param,null,
++                           PKCS11Constants.CKA_ENCRYPT, PKCS11Constants.CKA_DERIVE,(long) 8);
++
++
++       SymmetricKey extracted8 = extract8.derive();
++       System.out.println("Derived key: " + extracted8);
++
++        if(extracted8 == null) {
++            System.out.println("Failed to derive key extracted 8 bytes with mechanism: CKM_EXTRACT_KEY_FROM_KEY \n");
++        }
++
++        byte[] extracted8Bytes = extracted8.getEncoded();
++        System.out.println("derived extracted 8 bytes of key: ");
++        displayByteArray(extracted8Bytes,true);
++
++
++        /*****************************************************************************************************/
++
++
++         System.out.println("\n Mechanism CKM_CONCATENATE_BASE_AND_KEY test 16 + 8 = 24 byte key. \n");
++
++        SymmetricKeyDeriver concat = keyToken.getSymmetricKeyDeriver();
++        concat.initDerive(
++                           extracted16,extracted8, PKCS11Constants.CKM_CONCATENATE_BASE_AND_KEY,null,null,
++                           PKCS11Constants.CKM_DES3_ECB, PKCS11Constants.CKA_DERIVE,(long) 0);
++
++        SymmetricKey concated24 =  concat.derive();
++
++        if( concated24 == null) {
++            System.out.println("Failed to derive key concated 8 bytes to 16 bytes key: CKM_CONCATENATE_BASE_AND_KEY \n");
++        }
++
++        byte[] concated24Bytes = concated24.getEncoded();
++        System.out.println("derived concated 16 + 8 = 24 byte key: ");
++        displayByteArray(concated24Bytes,true);
++
++        /*****************************************************************************************************/
++
++        // Now lets try  more complex derivation
++
++       // tmp2 = PK11_Derive( master , CKM_DES_ECB_ENCRYPT_DATA , &param , CKM_CONCATENATE_BASE_AND_KEY , CKA_DERIVE , 0);
++
++       System.out.println("\n Mechanism CKM_DES_ECB_ENCRYPT_DATA test. \n");
++
++       SymmetricKeyDeriver encrypt = token.getSymmetricKeyDeriver();
++
++       encrypt.initDerive(
++                           baseKeyDes, /* PKCS11Constants.CKM_DES_ECB_ENCRYPT_DATA */ 4352L,derivationData1 ,null,
++                           PKCS11Constants.CKM_DES_ECB, PKCS11Constants.CKA_DERIVE,(long) 8);
++
++       SymmetricKey encrypted8 = encrypt.derive();
++
++       if( encrypted8 == null) {
++            System.out.println("Failed to derive  8 bytes from encrypted derivation data.");
++        }
++
++        byte[] encrypted8Bytes = encrypted8.getEncoded();
++        System.out.println("derived encrypted 8 bytes: " + encrypted8Bytes.length);
++        displayByteArray(encrypted8Bytes,true);
++
++        Cipher cipher = null;
++        cipher =  keyToken.getCipherContext(EncryptionAlgorithm.DES_ECB);
++
++        cipher.initEncrypt(baseKeyDes);
++
++        byte[] ciphertext = cipher.doFinal(derivationData1);
++        displayByteArray(ciphertext,true);
++
++        if ( ciphertext.length != encrypted8Bytes.length ) {
++            System.out.println("FAILED: encrypted data length not equal to derived key length.");
++        } else {
++            for ( int i = 0; i < ciphertext.length ; i ++) {
++                ciphertext[i]&=0xfe;
++                encrypted8Bytes[i]&=0xfe;
++            }
++            if ( Arrays.equals(ciphertext, encrypted8Bytes)) {
++                System.out.println("PASSED: derived key the same as encrypted data.");
++            } else {
++
++                System.out.println("FAILED: derived key not the same as encrypted data.");
++            }
++        }
++
++
++        /*****************************************************************************************************/
++
++        // Try ecnrypted des3 derivation
++
++       System.out.println("\n Mechanism CKM_DES3_ECB_ENCRYPT_DATA test. \n");
++
++       SymmetricKeyDeriver encryptDes3 = token.getSymmetricKeyDeriver();
++
++       encryptDes3.initDerive(
++                           baseKey, /* PKCS11Constants.CKM_DES3_ECB_ENCRYPT_DATA */ 4354L  ,derivationData16 ,null,
++                           PKCS11Constants.CKM_DES3_ECB, PKCS11Constants.CKA_DERIVE,(long) 16);
++
++
++       SymmetricKey encrypted16 = encryptDes3.derive();
++
++       if ( encrypted16 == null) {
++           System.out.println("Failed to derive 16 bytes from encrypted derivation data.");
++       }
++
++       byte[] encrypted16Bytes = encrypted16.getEncoded();
++
++       System.out.println("derived encrypted 16 bytes: " + encrypted16Bytes.length);
++       displayByteArray(encrypted16Bytes,true);
++
++
++       cipher =  keyToken.getCipherContext(EncryptionAlgorithm.DES3_ECB);
++       cipher.initEncrypt(baseKey);
++       ciphertext = cipher.doFinal(derivationData16);
++       displayByteArray(ciphertext,true);
++
++       if ( ciphertext.length != encrypted16Bytes.length ) {
++           System.out.println("FAILED: encrypted data length not equal to derived key length.");
++       } else {
++           for ( int i = 0; i < ciphertext.length ; i ++) {
++               ciphertext[i]&=0xfe;
++               encrypted16Bytes[i]&=0xfe;
++           }
++           if ( Arrays.equals(ciphertext, encrypted16Bytes)) {
++               System.out.println("PASSED: derived key the same as encrypted data.");
++           } else {
++               System.out.println("FAILED: derived key not the same as encrypted data.");
++           }
++       }
++
++
++       /*****************************************************************************************************/
++
++       System.out.println("\n Mechanism CKM_DES_CBC_ENCRYPT_DATA test. \n");
++
++       SymmetricKeyDeriver encryptDesCBC = token.getSymmetricKeyDeriver();
++
++       encryptDesCBC.initDerive(
++                           baseKeyDes, /* PKCS11Constants.CKM_DES_CBC_ENCRYPT_DATA */ 4353L  ,derivationData1 ,iv8,
++                           PKCS11Constants.CKM_DES_CBC, PKCS11Constants.CKA_DERIVE,(long) 8);
++
++
++       SymmetricKey encryptedDesCBC = encryptDesCBC.derive();
++
++       if ( encryptedDesCBC == null) {
++           System.out.println("Failed to derive 8 bytes from encrypted derivation data.");
++       }
++
++       byte[] encryptedDesCBCBytes = encryptedDesCBC.getEncoded();
++
++       System.out.println("derived encrypted 8 bytes: " + encryptedDesCBCBytes.length);
++       displayByteArray(encryptedDesCBCBytes,true);
++
++
++       cipher =  keyToken.getCipherContext(EncryptionAlgorithm.DES_CBC);
++       cipher.initEncrypt(baseKeyDes,new IVParameterSpec(iv8));
++       ciphertext = cipher.doFinal(derivationData1);
++       displayByteArray(ciphertext,true);
++
++        if ( ciphertext.length != encryptedDesCBCBytes.length ) {
++            System.out.println("FAILED: encrypted data length not equal to derived key length.");
++        } else {
++            for ( int i = 0; i < ciphertext.length ; i ++) {
++                ciphertext[i]&=0xfe;
++                encryptedDesCBCBytes[i]&=0xfe;
++            }
++            if ( Arrays.equals(ciphertext, encryptedDesCBCBytes)) {
++                System.out.println("PASSED: derived key the same as encrypted data.");
++            } else {
++
++                System.out.println("FAILED: derived key not the same as encrypted data.");
++            }
++        }
++
++        /*****************************************************************************************************/
++
++       System.out.println("\n Mechanism CKM_DES3_CBC_ENCRYPT_DATA test. \n");
++        
++       SymmetricKeyDeriver encryptDes3CBC = token.getSymmetricKeyDeriver();
++
++       encryptDes3CBC.initDerive(
++                           baseKey, /* PKCS11Constants.CKM_DES3_CBC_ENCRYPT_DATA */ 4355L  ,derivationData16 ,iv8,
++                           PKCS11Constants.CKM_DES3_CBC, PKCS11Constants.CKA_DERIVE,(long) 16);
++        
++
++       SymmetricKey encryptedDes3CBC = encryptDes3CBC.derive();
++        
++       if ( encryptedDes3CBC == null) {
++           System.out.println("Failed to derive 16 bytes from encrypted derivation data.");
++       }
++        
++       byte[] encryptedDes3CBCBytes = encryptedDes3CBC.getEncoded();
++
++       System.out.println("derived encrypted 16 bytes: " + encryptedDes3CBCBytes.length);
++       displayByteArray(encryptedDes3CBCBytes,true);
++
++
++       cipher =  keyToken.getCipherContext(EncryptionAlgorithm.DES3_CBC);
++       cipher.initEncrypt(baseKey,new IVParameterSpec(iv8));
++       ciphertext = cipher.doFinal(derivationData16);
++       displayByteArray(ciphertext,true);
++
++        if ( ciphertext.length != encryptedDes3CBCBytes.length ) {
++            System.out.println("FAILED: encrypted data length not equal to derived key length.");
++        } else {
++            for ( int i = 0; i < ciphertext.length ; i ++) {
++                ciphertext[i]&=0xfe;
++                encryptedDes3CBCBytes[i]&=0xfe;
++            }
++            if ( Arrays.equals(ciphertext, encryptedDes3CBCBytes)) {
++                System.out.println("PASSED: derived key the same as encrypted data.");
++            } else {
++
++                System.out.println("FAILED: derived key not the same as encrypted data.");
++            }
++        }
++
++        /*****************************************************************************************************/
++
++       System.out.println("\n Mechanism CKM_AES_ECB_ENCRYPT_DATA test. \n");
++
++       SymmetricKeyDeriver encryptAESECB = token.getSymmetricKeyDeriver();
++
++       //System.in.read();
++       encryptAESECB.initDerive(
++                           baseKeyAES, /* PKCS11Constants.CKM_AES_ECB_ENCRYPT_DATA */ 4356L  ,derivationData16 ,null,
++                           PKCS11Constants.CKM_AES_ECB, PKCS11Constants.CKA_DERIVE,(long) 16);
++
++
++       SymmetricKey encryptedAESECB = encryptAESECB.derive();
++
++       if ( encryptedAESECB == null) {
++           System.out.println("Failed to derive 16 bytes from encrypted derivation data.");
++       }
++
++       byte[] encryptedAESECBBytes = encryptedAESECB.getEncoded();
++
++       System.out.println("derived encrypted 16 bytes: " + encryptedAESECBBytes.length);
++       displayByteArray(encryptedAESECBBytes,true);
++
++
++       cipher =  keyToken.getCipherContext(EncryptionAlgorithm.AES_128_ECB);
++       cipher.initEncrypt(baseKeyAES);
++       ciphertext = cipher.doFinal(derivationData16);
++       displayByteArray(ciphertext,true);
++
++        if ( ciphertext.length != encryptedAESECBBytes.length ) {
++            System.out.println("FAILED: encrypted data length not equal to derived key length.");
++        } else {
++            for ( int i = 0; i < ciphertext.length ; i ++) {
++                ciphertext[i]&=0xfe;
++                encryptedAESECBBytes[i]&=0xfe;
++            }
++            if ( Arrays.equals(ciphertext, encryptedAESECBBytes)) {
++                System.out.println("PASSED: derived key the same as encrypted data.");
++            } else {
++
++                System.out.println("FAILED: derived key not the same as encrypted data.");
++            }
++        }
++
++
++       /*****************************************************************************************************/
++
++       System.out.println("\n Mechanism CKM_AES_CBC_ENCRYPT_DATA test. \n");
++
++       SymmetricKeyDeriver encryptAESCBC= token.getSymmetricKeyDeriver();
++
++       //System.in.read();
++       encryptAESCBC.initDerive(
++                           baseKeyAES, /* PKCS11Constants.CKM_AES_CBC_ENCRYPT_DATA */ 4357L  ,derivationData16 ,iv16,
++                           PKCS11Constants.CKM_AES_CBC, PKCS11Constants.CKA_DERIVE,(long) 16);
++
++
++       SymmetricKey encryptedAESCBC = encryptAESCBC.derive();
++
++       if ( encryptedAESCBC == null) {
++           System.out.println("Failed to derive 16 bytes from encrypted derivation data.");
++       }
++
++       byte[] encryptedAESCBCBytes = encryptedAESCBC.getEncoded();
++
++       System.out.println("derived encrypted 16 bytes: " + encryptedAESCBCBytes.length);
++       displayByteArray(encryptedAESCBCBytes,true);
++
++
++       cipher =  keyToken.getCipherContext(EncryptionAlgorithm.AES_128_CBC);
++       cipher.initEncrypt(baseKeyAES,new IVParameterSpec(iv16));
++       ciphertext = cipher.doFinal(derivationData16);
++       displayByteArray(ciphertext,true);
++
++        if ( ciphertext.length != encryptedAESCBCBytes.length ) {
++            System.out.println("FAILED: encrypted data length not equal to derived key length.");
++        } else {
++            for ( int i = 0; i < ciphertext.length ; i ++) {
++                ciphertext[i]&=0xfe;
++                encryptedAESCBCBytes[i]&=0xfe;
++            }
++            if ( Arrays.equals(ciphertext, encryptedAESCBCBytes)) {
++                System.out.println("PASSED: derived key the same as encrypted data.");
++            } else {
++
++                System.out.println("FAILED: derived key not the same as encrypted data.");
++            }
++        }
++
++        // get vector of symkeys
++
++        Enumeration<CryptoToken> ect = null; 
++        ect = (Enumeration<CryptoToken>) cm.getAllTokens(); 
++        CryptoToken ct = null; //ct = cm.getTokenByName("ePass Token"); 
++        while (ect.hasMoreElements()) 
++        { 
++          ct = ect.nextElement(); 
++          System.out.println("CryptoToken.name= " + ct.getName()); 
++        } 
++
++        SymmetricKey[] keys = keyToken.getCryptoStore().getSymmetricKeys();
++
++        SymmetricKey macKey = getSymKeyByName(keys, "defKeySet-macKey");
++
++        System.out.println("macKey: " + macKey);
++
++      } catch(Exception e) {
++        e.printStackTrace();
++      }
++    }
++
++    public static void
++    displayByteArray(byte[] ba, boolean has_check_sum) {
++        char mask = 0xff;
++
++        if ( has_check_sum == true )
++            mask = 0xfe;
++
++        for(int i=0; i < ba.length; i++) {
++ 
++            System.out.print( Integer.toHexString(ba[i]&mask) + " " );
++            if( (i % 26) == 25 ) {
++                System.out.println("");
++            }
++        }
++        System.out.println("");
++    }
++
++    public static  byte[] longToBytes(long x) {
++        ByteBuffer buffer = ByteBuffer.allocate(8);
++        buffer.putLong(x);
++        return buffer.array();
++    }
++
++    public static byte[] concatByteArrays(byte[] a, byte[] b) {
++        byte[] result = new byte[a.length + b.length]; 
++        System.arraycopy(a, 0, result, 0, a.length); 
++        System.arraycopy(b, 0, result, a.length, b.length); 
++        return result;
++    }
++
++    public static SymmetricKey getSymKeyByName( SymmetricKey[] keys, String name) {
++        if ( keys == null || name == null ) {
++            return null;
++        }
++
++        int len = keys.length;
++        for(int i = 0 ; i < len ; i++ ) {
++            SymmetricKey cur = keys[i];
++            if ( cur != null ) {
++                if( name.equals(cur.getNickName())) {
++                    System.out.println("Found key: " + name + "\n");
++                    return cur; 
++                }
++            }
++        }
++
++        return null;
++    }
++}
+diff -up ./mozilla/security/jss/org/mozilla/jss/util/java_ids.h.jmagne ./mozilla/security/jss/org/mozilla/jss/util/java_ids.h
+--- ./mozilla/security/jss/org/mozilla/jss/util/java_ids.h.jmagne	2016-04-14 16:34:36.729287416 -0700
++++ ./mozilla/security/jss/org/mozilla/jss/util/java_ids.h	2016-04-14 16:34:45.608226163 -0700
+@@ -243,6 +243,7 @@ PR_BEGIN_EXTERN_C
+  */
+ #define PK11SYMKEY_CLASS_NAME "org/mozilla/jss/pkcs11/PK11SymKey"
+ #define PK11SYMKEY_CONSTRUCTOR_SIG "([B)V"
++#define PK11SYMKEY_CONSTRUCTOR_1_SIG "([BLjava/lang/String;)V" 
+ 
+ /*
+  * PK11Token

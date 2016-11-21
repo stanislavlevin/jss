@@ -1,9 +1,30 @@
-EVR: 4.2.6-37.fc23
+EVR: 4.2.6-42.fc26
 Name: jss
 Version: 4.2.6
-Release: 37
-srpm: /var/ftp/pub/Linux/fedora/linux/development/rawhide/source/SRPMS/j/jss-4.2.6-37.fc23.src.rpm
+Release: 42
+srpm: /var/ftp/pub/Linux/fedora/linux/development/rawhide/Everything/source/tree/Packages/j/jss-4.2.6-42.fc26.src.rpm
 %changelog
+* Tue Aug 9 2016 Christina Fu <cfu@redhat.com> - 4.2.6-42
+- Sync up patches from both Fedora and RHEL; adding two patches
+  (cfu, edewata, mharmsen) from RHEL:
+- Bugzilla Bug #1238450 - UnsatisfiedLinkError on Windows (cfu)
+- make it compile on Windows platforms (cfu for nhosoi)
+
+* Fri Jun 24 2016 Christina Fu <cfu@redhat.com> - 4.2.6-41
+- Bugzilla 1221295 jss fails to decode EncryptedKey >> EnvelopedData
+  (cfu for roysjosh@gmail.com)
+
+* Thu May 19 2016 Christina Fu <cfu@redhat.com> - 4.2.6-40
+- Bugzilla 1074208 - pass up exact JSS certificate validation errors from NSS
+  (edewata)
+- Bugzilla 1331596 - Key archival fails when KRA is configured with lunasa.
+  (cfu)
+- PKI ticket 801 - Merge pki-symkey into jss (phase 1)
+  (jmagne)
+
+* Wed Dec 09 2015 Endi Dewata <edewata@redhat.com> - 4.2.6-38
+- Bugzilla Bug #1289799 - JSS build failure on F23 and Rawhide (edewata)
+
 * Thu Apr 09 2015 Marcin Juszkiewicz <mjuszkiewicz@redhat.com> - 4.2.6-37
 - Fix use of __isa_bits macro so it does not fail during srpm generation on koji
 

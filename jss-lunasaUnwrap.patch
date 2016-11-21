@@ -1,0 +1,12 @@
+diff -up jss-4.2.6/mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.c.cfu jss-4.2.6/mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.c
+--- jss-4.2.6/mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.c.cfu	2016-04-28 16:50:06.000000000 -0700
++++ jss-4.2.6/mozilla/security/jss/org/mozilla/jss/pkcs11/PK11KeyWrapper.c	2016-04-28 16:50:00.000000000 -0700
+@@ -434,7 +434,7 @@ Java_org_mozilla_jss_pkcs11_PK11KeyWrapp
+         isSensitive = PR_FALSE;
+         isExtractable = PR_FALSE;
+     } else if ( isLunasa) {
+-        isSensitive = PR_FALSE;
++        isSensitive = PR_TRUE;
+         isExtractable = PR_TRUE;
+     }
+ 

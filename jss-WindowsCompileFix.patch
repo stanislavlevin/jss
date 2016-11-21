@@ -1,0 +1,32 @@
+diff -up jss-4.2.6/mozilla/security/jss/org/mozilla/jss/ssl/SSLSocket.c.cfu jss-4.2.6/mozilla/security/jss/org/mozilla/jss/ssl/SSLSocket.c
+--- jss-4.2.6/mozilla/security/jss/org/mozilla/jss/ssl/SSLSocket.c.cfu	2015-04-23 13:25:45.104249135 -0700
++++ jss-4.2.6/mozilla/security/jss/org/mozilla/jss/ssl/SSLSocket.c	2015-04-23 13:39:29.958813779 -0700
+@@ -49,10 +49,12 @@
+ 
+ #ifdef WINNT
+ #include <private/pprio.h>
++#define AF_INET6 23
+ #endif 
+ 
+ #ifdef WIN32
+ #include <winsock.h>
++#define AF_INET6 23
+ #endif
+ 
+ 
+@@ -66,6 +68,7 @@ Java_org_mozilla_jss_ssl_SSLSocket_setSS
+ {
+     SECStatus status;
+     SSLVersionRange vrange;
++    SSLVersionRange supported_range;
+ 
+     if (ssl_variant <0 || ssl_variant >= JSSL_enums_size|| 
+             min <0 || min >= JSSL_enums_size ||
+@@ -80,7 +83,6 @@ Java_org_mozilla_jss_ssl_SSLSocket_setSS
+     vrange.max = JSSL_enums[max];
+ 
+     /* get supported range */
+-    SSLVersionRange supported_range;
+     status = SSL_VersionRangeGetSupported(JSSL_enums[ssl_variant],
+                 &supported_range);
+     if( status != SECSuccess ) {

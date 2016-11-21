@@ -1,0 +1,349 @@
+From 22092d1bde94dc8a1f6e8198fa2fcc597c36c32f Mon Sep 17 00:00:00 2001
+From: "Endi S. Dewata" <edewata@redhat.com>
+Date: Wed, 9 Dec 2015 00:30:50 +0100
+Subject: [PATCH] Fixed build failures.
+
+The Javadoc on various classes have been modified to fix build
+failures on F23 and Rawhide due to stringent requirements on
+those platforms.
+
+The Debug_debug.jnot has been renamed to Debug.java to fix build
+failure in Eclipse.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1289799
+---
+ .classpath                                              |  7 +++++++
+ .project                                                | 17 +++++++++++++++++
+ mozilla/security/jss/build_java.pl                      |  2 +-
+ mozilla/security/jss/org/mozilla/jss/CryptoManager.java | 14 +++++++-------
+ .../security/jss/org/mozilla/jss/asn1/ASN1Header.java   |  2 +-
+ .../security/jss/org/mozilla/jss/pkcs11/PK11Token.java  |  2 +-
+ .../security/jss/org/mozilla/jss/pkcs12/CertBag.java    |  1 +
+ .../security/jss/org/mozilla/jss/pkcs7/ContentInfo.java |  1 -
+ .../security/jss/org/mozilla/jss/pkcs7/SignerInfo.java  | 17 ++++++++++-------
+ .../jss/org/mozilla/jss/pkix/cms/ContentInfo.java       |  1 -
+ .../jss/org/mozilla/jss/pkix/cms/SignerInfo.java        | 17 ++++++++++-------
+ .../jss/org/mozilla/jss/pkix/crmf/CertReqMsg.java       |  2 +-
+ .../jss/org/mozilla/jss/ssl/SSLServerSocket.java        |  3 ---
+ .../mozilla/jss/util/{Debug_debug.jnot => Debug.java}   |  0
+ 14 files changed, 56 insertions(+), 30 deletions(-)
+ create mode 100644 .classpath
+ create mode 100644 .project
+ rename mozilla/security/jss/org/mozilla/jss/util/{Debug_debug.jnot => Debug.java} (100%)
+
+diff --git a/.classpath b/.classpath
+new file mode 100644
+index 0000000000000000000000000000000000000000..df092d3f7d8df936b753bea75c11bf4003e1a77f
+--- /dev/null
++++ b/.classpath
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<classpath>
++	<classpathentry excluding="samples/" kind="src" path="mozilla/security/jss"/>
++	<classpathentry kind="src" path="mozilla/security/jss/samples"/>
++	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
++	<classpathentry kind="output" path="bin"/>
++</classpath>
+diff --git a/.project b/.project
+new file mode 100644
+index 0000000000000000000000000000000000000000..c0b616e95c7512076c9976374bda14e11d7cdd8c
+--- /dev/null
++++ b/.project
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<projectDescription>
++	<name>jss-4.2</name>
++	<comment></comment>
++	<projects>
++	</projects>
++	<buildSpec>
++		<buildCommand>
++			<name>org.eclipse.jdt.core.javabuilder</name>
++			<arguments>
++			</arguments>
++		</buildCommand>
++	</buildSpec>
++	<natures>
++		<nature>org.eclipse.jdt.core.javanature</nature>
++	</natures>
++</projectDescription>
+diff --git a/mozilla/security/jss/build_java.pl b/mozilla/security/jss/build_java.pl
+index c34473e0eec883323b6b100e671018a9edafe442..379a5e05dbc0599c95d2228bd14f659d3e493d0b 100644
+--- a/mozilla/security/jss/build_java.pl
++++ b/mozilla/security/jss/build_java.pl
+@@ -137,7 +137,7 @@ sub setup_vars {
+         $class_jar = "$dist_dir/$cmdline_vars{XPCLASS_DBG_JAR}";
+         $class_release_dir .= "/$cmdline_vars{SOURCE_RELEASE_CLASSES_DBG_DIR}";
+         $javac_opt_flag = "-g";
+-        $debug_source_file = "org/mozilla/jss/util/Debug_debug.jnot";
++        $debug_source_file = "org/mozilla/jss/util/Debug.java";
+     }
+     $jni_header_dir = "$dist_dir/private/jss/_jni";
+ 
+diff --git a/mozilla/security/jss/org/mozilla/jss/CryptoManager.java b/mozilla/security/jss/org/mozilla/jss/CryptoManager.java
+index 08aad8fe3c3a62ae8e233fc1035723690adf4581..6ef0256a3b777db48461f19da0fa64ec7857ed6b 100644
+--- a/mozilla/security/jss/org/mozilla/jss/CryptoManager.java
++++ b/mozilla/security/jss/org/mozilla/jss/CryptoManager.java
+@@ -600,7 +600,7 @@ public final class CryptoManager implements TokenSupplier
+      * loaded cryptographic modules for the token.
+      *
+      * @param name The name of the token.
+-     * @exception org.mozilla.jss.crypto.NoSuchTokenException If no token
++     * @exception NoSuchTokenException If no token
+      *  is found with the given name.
+      */
+     public synchronized CryptoToken getTokenByName(String name)
+@@ -855,9 +855,9 @@ public final class CryptoManager implements TokenSupplier
+      * <code>initialize()</code>.
+      *
+      * @param configDir The directory containing the security databases.
+-     * @exception org.mozilla.jss.util.KeyDatabaseException Unable to open
++     * @exception KeyDatabaseException Unable to open
+      *  the key database, or it was currupted.
+-     * @exception org.mozilla.jss.util.CertDatabaseException Unable
++     * @exception CertDatabaseException Unable
+      *  to open the certificate database, or it was currupted.
+      **/
+     public static synchronized void initialize( String configDir )
+@@ -878,9 +878,9 @@ public final class CryptoManager implements TokenSupplier
+      * <code>initialize()</code>.
+      *
+      * @param values The options with which to initialize CryptoManager.
+-     * @exception org.mozilla.jss.util.KeyDatabaseException Unable to open
++     * @exception KeyDatabaseException Unable to open
+      *  the key database, or it was currupted.
+-     * @exception org.mozilla.jss.util.CertDatabaseException Unable
++     * @exception CertDatabaseException Unable
+      *  to open the certificate database, or it was currupted.
+      **/
+     public static synchronized void initialize( InitializationValues values )
+@@ -1021,7 +1021,7 @@ public final class CryptoManager implements TokenSupplier
+      * @return The leaf certificate from the chain.
+      * @exception CertificateEncodingException If the package encoding
+      *      was not recognized.
+-     * @exception CertificateNicknameConflictException If the leaf certificate
++     * @exception NicknameConflictException If the leaf certificate
+      *      is a user certificate, and another certificate already has the
+      *      given nickname.
+      * @exception UserCertConflictException If the leaf certificate
+@@ -1059,7 +1059,7 @@ public final class CryptoManager implements TokenSupplier
+      * @return The leaf certificate from the chain.
+      * @exception CertificateEncodingException If the package encoding
+      *      was not recognized.
+-     * @exception CertificateNicknameConflictException If the leaf certificate
++     * @exception NicknameConflictException If the leaf certificate
+      *      another certificate already has the given nickname.
+      * @exception UserCertConflictException If the leaf certificate
+      *      has already been imported.
+diff --git a/mozilla/security/jss/org/mozilla/jss/asn1/ASN1Header.java b/mozilla/security/jss/org/mozilla/jss/asn1/ASN1Header.java
+index bfa37c9f5eba1c5df9bb275cad16c1bf57c9c65d..d15be4922b52d16a25e3212b2b25809cd7ddf3b6 100644
+--- a/mozilla/security/jss/org/mozilla/jss/asn1/ASN1Header.java
++++ b/mozilla/security/jss/org/mozilla/jss/asn1/ASN1Header.java
+@@ -259,7 +259,7 @@ public class ASN1Header {
+     /**
+      * This constructor is to be called when we are constructing an ASN1Value
+      * rather than decoding it.
+-     * @param contentLength Must be >=0. Although indefinite length
++     * @param contentLength Must be &gt;=0. Although indefinite length
+      *      <i>decoding</i> is supported, indefinite length <i>encoding</i>
+      *      is not.
+      */
+diff --git a/mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Token.java b/mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Token.java
+index e521b6108b90daeb7035413bba50a41e9b20ec49..98e93f0e858b09402364b4dc89c36a63e7ef0f7b 100644
+--- a/mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Token.java
++++ b/mozilla/security/jss/org/mozilla/jss/pkcs11/PK11Token.java
+@@ -236,7 +236,7 @@ public final class PK11Token implements CryptoToken {
+      *
+      * @param ssopwcb The security officer's current password callback.
+      * @param userpwcb The user's new password callback.
+-     * @exception IncorrectPinException If the security officer PIN is
++     * @exception IncorrectPasswordException If the security officer PIN is
+      *  incorrect.
+      * @exception TokenException If the PIN was already initialized,
+      *  or there was an unspecified error in the token.
+diff --git a/mozilla/security/jss/org/mozilla/jss/pkcs12/CertBag.java b/mozilla/security/jss/org/mozilla/jss/pkcs12/CertBag.java
+index a1b08d2e9ee9dfcb4ee809e101f3074611664384..61ad979d65d5ecc6659281218c58e8ec9a48211c 100644
+--- a/mozilla/security/jss/org/mozilla/jss/pkcs12/CertBag.java
++++ b/mozilla/security/jss/org/mozilla/jss/pkcs12/CertBag.java
+@@ -91,6 +91,7 @@ public class CertBag implements ASN1Value {
+      * <li>If the type is <code>SDSI_CERT_TYPE</code>, returns
+      *      an IA5String.
+      * <li>For all other types, returns an ANY.
++     * </ul>
+      *
+      * @exception InvalidBERException If the cert is not encoded correctly.
+      */
+diff --git a/mozilla/security/jss/org/mozilla/jss/pkcs7/ContentInfo.java b/mozilla/security/jss/org/mozilla/jss/pkcs7/ContentInfo.java
+index 4db7a42c75cc21d71841e20dcb9a4c1494ff08c2..4578e9bcd8abdb4e7b6717b07aee932dd887d675 100644
+--- a/mozilla/security/jss/org/mozilla/jss/pkcs7/ContentInfo.java
++++ b/mozilla/security/jss/org/mozilla/jss/pkcs7/ContentInfo.java
+@@ -169,7 +169,6 @@ public class ContentInfo implements ASN1Value {
+      *  an OCTET_STRING will be returned.
+      * <p>If the contentType is <b>not</b> one of the six standard types,
+      *      the returned object will be an ANY.
+-     * </ul>
+      */
+     public ASN1Value getInterpretedContent() throws InvalidBERException {
+         if(contentType.equals(DATA)) {
+diff --git a/mozilla/security/jss/org/mozilla/jss/pkcs7/SignerInfo.java b/mozilla/security/jss/org/mozilla/jss/pkcs7/SignerInfo.java
+index 300e993cffd9dcadaf996609abeebf8627eafde8..c49107c80543ec94fbb3117a1a9a1088f851a6b3 100644
+--- a/mozilla/security/jss/org/mozilla/jss/pkcs7/SignerInfo.java
++++ b/mozilla/security/jss/org/mozilla/jss/pkcs7/SignerInfo.java
+@@ -129,7 +129,7 @@ public class SignerInfo implements ASN1Value {
+     /**
+      * Retrieves the DigestAlgorithm used in this SignerInfo.
+      *
+-     * @exception NoSuchAlgorithm If the algorithm is not recognized by JSS.
++     * @exception NoSuchAlgorithmException If the algorithm is not recognized by JSS.
+      */
+     public DigestAlgorithm getDigestAlgorithm()
+         throws NoSuchAlgorithmException
+@@ -402,10 +402,12 @@ public class SignerInfo implements ASN1Value {
+     /**
+      * Verifies that this SignerInfo contains a valid signature of the
+      * given message digest.  If any authenticated attributes are present,
+-     * they are also validated. The verification algorithm is as follows:<ul>
+-     * <p>Note that this does <b>not</b> verify the validity of the
+-     *  the certificate itself, only the signature.
++     * they are also validated. The verification algorithm is as follows:
+      *
++     * Note that this does <b>not</b> verify the validity of the
++     * the certificate itself, only the signature.
++     *
++     * <ul>
+      * <li>If no authenticated attributes are present, the content type is 
+      *  verified to be <i>data</i>. Then it is verified that the message
+      *  digest passed
+@@ -413,24 +415,25 @@ public class SignerInfo implements ASN1Value {
+      *  digest in the SignerInfo.
+      *
+      * <li>If authenticated attributes are present,
+-     *  two particular attributes must be present: <ul>
++     *  two particular attributes must be present:
++     * <ul>
+      *  <li>PKCS #9 Content-Type, the type of content that is being signed.
+      *      This must match the contentType parameter.
+      *  <li>PKCS #9 Message-Digest, the digest of the content that is being
+      *      signed. This must match the messageDigest parameter.
+      * </ul>
++     *
+      * After these two attributes are verified to be both present and correct,
+      * the encryptedDigest field of the SignerInfo is verified to be the
+      * signature of the contents octets of the DER encoding of the
+      * authenticatedAttributes field.
+-     *
+      * </ul>
+      *
+      * @param messageDigest The hash of the content that is signed by this
+      *  SignerInfo.
+      * @param contentType The type of the content that is signed by this
+      *  SignerInfo.
+-     * @exception NoSuchObjectException If no certificate matching the
++     * @exception ObjectNotFoundException If no certificate matching the
+      *      the issuer name and serial number can be found.
+      */
+     public void verify(byte[] messageDigest, OBJECT_IDENTIFIER contentType)
+diff --git a/mozilla/security/jss/org/mozilla/jss/pkix/cms/ContentInfo.java b/mozilla/security/jss/org/mozilla/jss/pkix/cms/ContentInfo.java
+index 91ae770c94b3a8817c13e4cb86609c432ef682b8..9f61e605b416dffc38525ccec4dcce9f380c7dcc 100644
+--- a/mozilla/security/jss/org/mozilla/jss/pkix/cms/ContentInfo.java
++++ b/mozilla/security/jss/org/mozilla/jss/pkix/cms/ContentInfo.java
+@@ -168,7 +168,6 @@ public class ContentInfo implements ASN1Value {
+      *  an OCTET_STRING will be returned.
+      * <p>If the contentType is <b>not</b> one of the six standard types,
+      *      the returned object will be an ANY.
+-     * </ul>
+      */
+     public ASN1Value getInterpretedContent() throws InvalidBERException {
+         if(contentType.equals(DATA)) {
+diff --git a/mozilla/security/jss/org/mozilla/jss/pkix/cms/SignerInfo.java b/mozilla/security/jss/org/mozilla/jss/pkix/cms/SignerInfo.java
+index ff34a554e4d5f43b6ce18acfac01899858d62117..e7feb934dc0a78fbc40a6ff7d8db87f0af9177fe 100644
+--- a/mozilla/security/jss/org/mozilla/jss/pkix/cms/SignerInfo.java
++++ b/mozilla/security/jss/org/mozilla/jss/pkix/cms/SignerInfo.java
+@@ -130,7 +130,7 @@ public class SignerInfo implements ASN1Value {
+     /**
+      * Retrieves the DigestAlgorithm used in this SignerInfo.
+      *
+-     * @exception NoSuchAlgorithm If the algorithm is not recognized by JSS.
++     * @exception NoSuchAlgorithmException If the algorithm is not recognized by JSS.
+      */
+     public DigestAlgorithm getDigestAlgorithm()
+         throws NoSuchAlgorithmException
+@@ -403,10 +403,12 @@ public class SignerInfo implements ASN1Value {
+     /**
+      * Verifies that this SignerInfo contains a valid signature of the
+      * given message digest.  If any signed attributes are present,
+-     * they are also validated. The verification algorithm is as follows:<ul>
+-     * <p>Note that this does <b>not</b> verify the validity of the
+-     *  the certificate itself, only the signature.
++     * they are also validated. The verification algorithm is as follows:
+      *
++     * Note that this does <b>not</b> verify the validity of the
++     * the certificate itself, only the signature.
++     *
++     * <ul>
+      * <li>If no signed attributes are present, the content type is 
+      *  verified to be <i>data</i>. Then it is verified that the message
+      *  digest passed
+@@ -414,24 +416,25 @@ public class SignerInfo implements ASN1Value {
+      *  digest in the SignerInfo.
+      *
+      * <li>If signed attributes are present,
+-     *  two particular attributes must be present: <ul>
++     *  two particular attributes must be present:
++     * <ul>
+      *  <li>PKCS #9 Content-Type, the type of content that is being signed.
+      *      This must match the contentType parameter.
+      *  <li>PKCS #9 Message-Digest, the digest of the content that is being
+      *      signed. This must match the messageDigest parameter.
+      * </ul>
++     *
+      * After these two attributes are verified to be both present and correct,
+      * the encryptedDigest field of the SignerInfo is verified to be the
+      * signature of the contents octets of the DER encoding of the
+      * signedAttributes field.
+-     *
+      * </ul>
+      *
+      * @param messageDigest The hash of the content that is signed by this
+      *  SignerInfo.
+      * @param contentType The type of the content that is signed by this
+      *  SignerInfo.
+-     * @exception NoSuchObjectException If no certificate matching the
++     * @exception ObjectNotFoundException If no certificate matching the
+      *      the issuer name and serial number can be found.
+      */
+     public void verify(byte[] messageDigest, OBJECT_IDENTIFIER contentType)
+diff --git a/mozilla/security/jss/org/mozilla/jss/pkix/crmf/CertReqMsg.java b/mozilla/security/jss/org/mozilla/jss/pkix/crmf/CertReqMsg.java
+index 53d162b69673caeed3e998dc9c2e221b95dfc6db..c6637039c87043f36dd1a1e449a819edbcc816e3 100644
+--- a/mozilla/security/jss/org/mozilla/jss/pkix/crmf/CertReqMsg.java
++++ b/mozilla/security/jss/org/mozilla/jss/pkix/crmf/CertReqMsg.java
+@@ -112,7 +112,7 @@ public class CertReqMsg implements ASN1Value {
+ 
+     /**
+      * Constructs a <i>CertReqmsg</i> from a <i>CertRequest</i> and, optionally,
+-     * a <i>pop>/i> and a <i>regInfo</i>.
++     * a <i>pop</i> and a <i>regInfo</i>.
+      * @param pop May be NULL.
+      * @param regInfo May be NULL.
+      */
+diff --git a/mozilla/security/jss/org/mozilla/jss/ssl/SSLServerSocket.java b/mozilla/security/jss/org/mozilla/jss/ssl/SSLServerSocket.java
+index 2043a598cf3e8d023287c0f7142045c1e4f68e4d..58d14496e5ad92aa91a966e119e14f470da4fd4a 100644
+--- a/mozilla/security/jss/org/mozilla/jss/ssl/SSLServerSocket.java
++++ b/mozilla/security/jss/org/mozilla/jss/ssl/SSLServerSocket.java
+@@ -174,9 +174,6 @@ public class SSLServerSocket extends java.net.ServerSocket {
+      * @return java.net.Socket Local socket for client communication
+      *
+      * @throws IOException  If an input or output exception occurred
+-     * @throws SocketTimeoutException  If the socket timesout trying to connect
+-     * @throws InterruptedIOException  If an input or output is interrupted
+-     * @throws SSLSocketException  JSS subclass of java.net.SocketException
+      */
+     public Socket accept() throws IOException {
+         synchronized (acceptLock) {
+diff --git a/mozilla/security/jss/org/mozilla/jss/util/Debug_debug.jnot b/mozilla/security/jss/org/mozilla/jss/util/Debug.java
+similarity index 100%
+rename from mozilla/security/jss/org/mozilla/jss/util/Debug_debug.jnot
+rename to mozilla/security/jss/org/mozilla/jss/util/Debug.java
+-- 
+2.4.3
+

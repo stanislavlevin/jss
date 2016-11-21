@@ -1,0 +1,204 @@
+From 3c4ca8a2010889fe292704ebcc8b922f77f2f7c2 Mon Sep 17 00:00:00 2001
+From: "Endi S. Dewata" <edewata@redhat.com>
+Date: Wed, 9 Dec 2015 00:30:50 +0100
+Subject: [PATCH] Added verifyCertificate() method.
+
+A new CryptoManager.verifyCertificate() method has been added as
+an alternative to isCertValid(). If there is a certificate
+validation problem, the method will throw a CertificateValidation
+exception that contains the NSS error message and code. The
+exception will also provide a stack trace to help troubleshoot
+validation issues.
+
+https://fedorahosted.org/pki/ticket/850
+---
+ .../jss/org/mozilla/jss/CryptoManager.java         | 54 ++++++++------
+ mozilla/security/jss/org/mozilla/jss/PK11Finder.c  | 83 +++++++++++++++++++---
+ .../jss/org/mozilla/jss/util/jss_exceptions.h      |  2 +
+ 3 files changed, 110 insertions(+), 29 deletions(-)
+
+diff --git a/mozilla/security/jss/org/mozilla/jss/CryptoManager.java b/mozilla/security/jss/org/mozilla/jss/CryptoManager.java
+index 0a4f59064bfddb42d473022550c24f251719d02b..54ffd8130b0e1f1fca49dd8b130a621e449c7ce7 100644
+--- a/mozilla/security/jss/org/mozilla/jss/CryptoManager.java
++++ b/mozilla/security/jss/org/mozilla/jss/CryptoManager.java
+@@ -1515,30 +1515,44 @@ public final class CryptoManager implements TokenSupplier
+             CertificateUsage certificateUsage)
+         throws ObjectNotFoundException, InvalidNicknameException
+     {
+-        if (nickname==null) {
+-            throw new InvalidNicknameException("Nickname must be non-null");
+-        }
+-        // 0 certificate usage will get current usage
+-        // should call isCertValid() call above that returns certificate usage
+-        if ((certificateUsage == null) ||
+-                (certificateUsage == CertificateUsage.CheckAllUsages)){
+-            int currCertificateUsage = 0x0000;
+-            currCertificateUsage = verifyCertificateNowCUNative(nickname,
+-                checkSig);
++        try {
++            verifyCertificate(nickname, checkSig, certificateUsage);
++            return true;
++
++        } catch (ObjectNotFoundException | InvalidNicknameException e) {
++            throw e;
+ 
+-            if (currCertificateUsage == CertificateUsage.basicCertificateUsages){ 
+-                // cert is good for nothing
+-                return false;
+-            } else
+-                return true;
+-        } else {
+-            return verifyCertificateNowNative(nickname, checkSig,
+-              certificateUsage.getUsage());
++        } catch (CertificateException e) {
++            return false;
+         }
+     }
+ 
+-    private native boolean verifyCertificateNowNative(String nickname,
+-        boolean checkSig, int certificateUsage) throws ObjectNotFoundException;
++    /**
++     * Verify a certificate that exists in the given cert database,
++     * check if it's valid and that we trust the issuer. Verify time
++     * against now.
++     * @param nickname nickname of the certificate to verify.
++     * @param checkSig verify the signature of the certificate
++     * @param certificateUsage see certificate usage defined to verify certificate
++     *
++     * @exception InvalidNicknameException If the nickname is null.
++     * @exception ObjectNotFoundException If no certificate could be found
++     *      with the given nickname.
++     * @exception CertificateException If certificate is invalid.
++     */
++    public void verifyCertificate(String nickname,
++            boolean checkSig,
++            CertificateUsage certificateUsage)
++                    throws ObjectNotFoundException, InvalidNicknameException, CertificateException {
++        int usage = certificateUsage == null ? 0 : certificateUsage.getUsage();
++        verifyCertificateNowNative(nickname, checkSig, usage);
++    }
++
++    private native void verifyCertificateNowNative(
++            String nickname,
++            boolean checkSig,
++            int certificateUsage)
++                    throws ObjectNotFoundException, InvalidNicknameException, CertificateException;
+ 
+     /**
+      * note: this method calls obsolete function in NSS
+diff --git a/mozilla/security/jss/org/mozilla/jss/PK11Finder.c b/mozilla/security/jss/org/mozilla/jss/PK11Finder.c
+index 8c7f0b4c05b58527a41cac140dbb5dc30578570f..4986478ffc860e145cd31e41c2880fcc2b5e007e 100644
+--- a/mozilla/security/jss/org/mozilla/jss/PK11Finder.c
++++ b/mozilla/security/jss/org/mozilla/jss/PK11Finder.c
+@@ -1667,21 +1667,86 @@ Java_org_mozilla_jss_CryptoManager_verifyCertificateNowCUNative(JNIEnv *env,
+ /***********************************************************************
+  * CryptoManager.verifyCertificateNowNative
+  *
+- * Returns JNI_TRUE if success, JNI_FALSE otherwise
++ * Verify a certificate that exists in the given cert database,
++ * check if it's valid and that we trust the issuer. Verify time
++ * against now.
++ * @param nickname nickname of the certificate to verify.
++ * @param checkSig verify the signature of the certificate
++ * @param certificateUsage see certificate usage defined to verify certificate
++ *
++ * @exception InvalidNicknameException If the nickname is null.
++ * @exception ObjectNotFoundException If no certificate could be found
++ *      with the given nickname.
++ * @exception CertificateException If certificate is invalid.
+  */
+-JNIEXPORT jboolean JNICALL
++JNIEXPORT void JNICALL
+ Java_org_mozilla_jss_CryptoManager_verifyCertificateNowNative(JNIEnv *env,
+-        jobject self, jstring nickString, jboolean checkSig, jint required_certificateUsage)
++        jobject self, jstring nickString, jboolean checkSig, jint certificateUsage)
+ {
+-    SECStatus         rv    = SECFailure;
+     SECCertificateUsage      currUsage = 0x0000;
++    SECStatus                rv = SECFailure;
++    CERTCertificate          *cert = NULL;
++    char                     *nickname = NULL;
+ 
+-    rv = verifyCertificateNow(env, self, nickString, checkSig, required_certificateUsage, &currUsage);
++    if (nickString == NULL) {
++        JSS_throwMsg(env, INVALID_NICKNAME_EXCEPTION, "Missing certificate nickname");
++        goto finish;
++    }
+ 
+-    if( rv == SECSuccess) {
+-        return JNI_TRUE;
+-    } else {
+-        return JNI_FALSE;
++    nickname = (char *) (*env)->GetStringUTFChars(env, nickString, NULL);
++
++    if (nickname == NULL) {
++        JSS_throwMsg(env, INVALID_NICKNAME_EXCEPTION, "Missing certificate nickname");
++        goto finish;
++    }
++
++    cert = CERT_FindCertByNickname(CERT_GetDefaultCertDB(), nickname);
++
++    if (cert == NULL) {
++        char *msgBuf;
++        msgBuf = PR_smprintf("Certificate not found: %s", nickname);
++        JSS_throwMsg(env, OBJECT_NOT_FOUND_EXCEPTION, msgBuf);
++        PR_Free(msgBuf);
++        goto finish;
++    }
++
++    /* 0 for certificateUsage in call to CERT_VerifyCertificateNow will
++     * retrieve the current valid usage into currUsage
++     */
++    rv = CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
++        checkSig, certificateUsage, NULL, &currUsage);
++
++    if (rv != SECSuccess) {
++        JSS_throwMsgPrErr(env, CERTIFICATE_EXCEPTION, "Invalid certificate");
++        goto finish;
++    }
++
++    if ((certificateUsage == 0x0000) &&
++        (currUsage ==
++            ( certUsageUserCertImport |
++            certUsageVerifyCA |
++            certUsageProtectedObjectSigner |
++            certUsageAnyCA ))) {
++
++        /* The certificate is good for nothing.
++         * The following usages cannot be verified:
++         *   certUsageAnyCA
++         *   certUsageProtectedObjectSigner
++         *   certUsageUserCertImport
++         *   certUsageVerifyCA
++         *   (0x0b80)
++         */
++
++        JSS_throwMsgPrErr(env, CERTIFICATE_EXCEPTION, "Unusable certificate");
++        goto finish;
++    }
++
++finish:
++    if (nickname != NULL) {
++        (*env)->ReleaseStringUTFChars(env, nickString, nickname);
++    }
++    if (cert != NULL) {
++        CERT_DestroyCertificate(cert);
+     }
+ }
+ 
+diff --git a/mozilla/security/jss/org/mozilla/jss/util/jss_exceptions.h b/mozilla/security/jss/org/mozilla/jss/util/jss_exceptions.h
+index 4884928306223ff0699a22e7da33e3d13a904d39..acd329a4ecd3592ebe1d72c7bdac435d84dcae99 100644
+--- a/mozilla/security/jss/org/mozilla/jss/util/jss_exceptions.h
++++ b/mozilla/security/jss/org/mozilla/jss/util/jss_exceptions.h
+@@ -79,6 +79,8 @@ PR_BEGIN_EXTERN_C
+ 
+ #define INTERRUPTED_IO_EXCEPTION "java/io/InterruptedIOException"
+ 
++#define INVALID_NICKNAME_EXCEPTION "org/mozilla/jss/util/InvalidNicknameException"
++
+ #define INVALID_KEY_FORMAT_EXCEPTION "org/mozilla/jss/crypto/InvalidKeyFormatException"
+ 
+ #define INVALID_PARAMETER_EXCEPTION "java/security/InvalidParameterException"
+-- 
+2.5.0
+
