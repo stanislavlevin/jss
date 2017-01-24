@@ -7,7 +7,7 @@ BuildRequires: jpackage-generic-compat
 %define fedora 24
 Name:           jss
 Version:        4.2.6
-Release:        alt5_42jpp8.M80P.1
+Release:        alt6_41jpp8.M80P.1
 Summary:        Java Security Services (JSS)
 
 Group:          System/Libraries
@@ -237,7 +237,7 @@ ln -s %_jnidir/jss4.jar %buildroot%_javadir/jss4.jar
 
 
 %changelog
-* Mon Jan 23 2017 Mikhail Efremov <sem@altlinux.org> 4.2.6-alt5_42jpp8.M80P.1
+* Tue Jan 24 2017 Mikhail Efremov <sem@altlinux.org> 4.2.6-alt6_41jpp8.M80P.1
 - Build for p8.
 
 * Mon Nov 21 2016 Igor Vlasenko <viy@altlinux.ru> 4.2.6-alt6_42jpp8
