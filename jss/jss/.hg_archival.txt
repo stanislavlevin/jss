@@ -1,0 +1,6 @@
+repo: 268c92218b5d884edf9b9ea4cd22b6b98f1afe0f
+node: 4ee5af07d6d8fd7efe60d130d3e7593f6e12e642
+branch: default
+latesttag: JSS_4_4_20170328
+latesttagdistance: 4
+changessincelatesttag: 4
