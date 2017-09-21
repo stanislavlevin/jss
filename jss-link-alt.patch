@@ -1,12 +1,13 @@
-diff -ur jss/mozilla/security/coreconf/Linux2.6.mk jss.new/mozilla/security/coreconf/Linux2.6.mk
---- jss/mozilla/security/coreconf/Linux2.6.mk	2006-01-14 01:41:03 +0300
-+++ jss.new/mozilla/security/coreconf/Linux2.6.mk	2007-10-23 16:44:32 +0400
-@@ -37,7 +37,7 @@
+diff --git a/coreconf/Linux.mk b/coreconf/Linux.mk
+index a586e5e..4752d8e 100644
+--- a/coreconf/Linux.mk
++++ b/coreconf/Linux.mk
+@@ -142,7 +142,7 @@ DSO_LDOPTS		= -shared $(ARCHFLAG)
+ # The linker on Red Hat Linux 7.2 and RHEL 2.1 (GNU ld version 2.11.90.0.8)
+ # incorrectly reports undefined references in the libraries we link with, so
+ # we don't use -z defs there.
+-ZDEFS_FLAG		= -Wl,-z,defs
++ZDEFS_FLAG		=
+ DSO_LDOPTS		+= $(if $(findstring 2.11.90.0.8,$(shell ld -v)),,$(ZDEFS_FLAG))
+ LDFLAGS			+= $(ARCHFLAG)
  
- include $(CORE_DEPTH)/coreconf/Linux.mk
- 
--DSO_LDOPTS      += -Wl,-z,defs
-+DSO_LDOPTS      += 
- 
- OS_REL_CFLAGS   += -DLINUX2_1
- MKSHLIB         = $(CC) $(DSO_LDOPTS) -Wl,-soname -Wl,$(@:$(OBJDIR)/%.so=%.so)
