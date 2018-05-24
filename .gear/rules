@@ -1,4 +1,2 @@
-copy: *.info
-copy: *.patch
-copy: *.txt
-tar.gz: jss
+tar: v@version@:. base=@name@-@version@/@name@
+diff: v@version@:. @name@ name=@name@-@version@-alt.patch
