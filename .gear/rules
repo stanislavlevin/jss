@@ -1,2 +1,3 @@
 tar: v@version@:. base=@name@-@version@/@name@
 diff: v@version@:. @name@ name=@name@-@version@-alt.patch
+copy: .gear/*.watch
