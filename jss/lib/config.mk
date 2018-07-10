@@ -53,7 +53,6 @@ EXTRA_SHARED_LIBS += \
     -L$(NSPR_LIB_DIR) \
     $(addprefix -l, $(NSPR_LIB_NAMES)) \
     $(JAVA_LIBS) \
-    -lsmime3 \
     $(NULL)
 
 endif
