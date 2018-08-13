@@ -4,18 +4,38 @@
 
 package org.mozilla.jss.tests;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.InetAddress;
+import java.net.SocketException;
+import java.net.UnknownHostException;
+import java.security.GeneralSecurityException;
+import java.util.ArrayList;
+import java.util.Iterator;
+
 import org.mozilla.jss.CertDatabaseException;
-import org.mozilla.jss.KeyDatabaseException;
-import org.mozilla.jss.ssl.*;
 import org.mozilla.jss.CryptoManager;
-import org.mozilla.jss.crypto.*;
+import org.mozilla.jss.InitializationValues;
+import org.mozilla.jss.KeyDatabaseException;
+import org.mozilla.jss.NotInitializedException;
+import org.mozilla.jss.crypto.AlreadyInitializedException;
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.crypto.TokenException;
+import org.mozilla.jss.crypto.X509Certificate;
+import org.mozilla.jss.ssl.SSLHandshakeCompletedEvent;
+import org.mozilla.jss.ssl.SSLHandshakeCompletedListener;
+import org.mozilla.jss.ssl.SSLSecurityStatus;
+import org.mozilla.jss.ssl.SSLSocket;
 import org.mozilla.jss.util.IncorrectPasswordException;
 import org.mozilla.jss.util.PasswordCallback;
-import org.mozilla.jss.util.Debug;
-import java.security.*;
-import java.net.*;
-import java.io.*;
-import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**************
  * Note on how to use JSS_SelfServServer and JSS_SelfServerClient
@@ -58,6 +78,8 @@ interface ConstantsBase {
 
 public class JSS_SelfServClient implements ConstantsBase, Constants {
 
+    public static Logger logger = LoggerFactory.getLogger(JSS_SelfServClient.class);
+
     private String  clientCertNick       = "default";
     private String  serverHost           = "localhost";
     private String  ciphersuiteTested    = null;
@@ -72,20 +94,24 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
     private boolean handshakeCompleted   = false;
     private boolean bVerbose             = false;
     private boolean bFipsMode            = false;
+
     /* ciphersuites to test */
-    private ArrayList ciphersToTest      = new ArrayList();
+    private ArrayList<Integer> ciphersToTest      = new ArrayList<>();
 
     private CryptoManager    cm          = null;
     private CryptoToken      tok         = null;
     private PasswordCallback cb          = null;
     private String  fPasswordFile        = "passwords";
     private String  fCertDbPath          = ".";
-    private ArrayList sockList           = new ArrayList();
+    private ArrayList<SSLSocket> sockList           = new ArrayList<>();
+
     /* h_ciphers is for ciphersuite that were able to successfully
      * connect to the server */
-    private ArrayList h_ciphers          = new ArrayList();
+    private ArrayList<String> h_ciphers          = new ArrayList<>();
+
     /* f_ciphers is for ciphersuite that failed to connect to the server */
-    private ArrayList f_ciphers          = new ArrayList();
+    private ArrayList<String> f_ciphers          = new ArrayList<>();
+
     private int sockID                   = 0;
     /* JSS only needs to be initailized for one instance */
     private static boolean bJSS          = false;
@@ -102,7 +128,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
      * Default Constructor.
      */
     public JSS_SelfServClient() {
-        if (Constants.debug_level > 3) {
+        if (logger.isDebugEnabled()) {
             bVerbose = true;
         }
         /*
@@ -119,7 +145,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
     public void setVerbose(boolean v) {
         bVerbose = v;
     }
-    
+
     /**
      * returns true if JSS is sync with NSS ciphersuites.
      */
@@ -155,7 +181,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
         }
         return cipherSuites;
     }
-    
+
     public void configureDefaultSSLOptions() {
         initJSS();
         try {
@@ -276,10 +302,10 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
      *For every enabled ciphersuite created numOfThreads connections.
      */
     public void testCiphersuites(int numOfThreads) {
-        Iterator iter = ciphersToTest.iterator();
+        Iterator<Integer> iter = ciphersToTest.iterator();
         setTestCiphers(true);
         while (iter.hasNext()) {
-            setCipher(((Integer)iter.next()).intValue());
+            setCipher(iter.next().intValue());
             try {
                 createSSLConnections(numOfThreads);
             } catch (Exception ex) {
@@ -294,25 +320,25 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
      * @param aCipher
      */
     public void setCipher(int aCipher) {
-        
+
         initJSS();
         int ciphers[] =
                 org.mozilla.jss.ssl.SSLSocket.getImplementedCipherSuites();
-        
+
         ciphersuiteTested = Constants.cipher.cipherToString(aCipher);
-        
+
         if (bVerbose || !bTestCiphers) {
             System.out.println("Testing " + Integer.toHexString(aCipher) +
                     " " + ciphersuiteTested);
         }
-        
+
         if (ciphersuiteTested != null) {
             fCipher = aCipher;
         } else {
             System.out.print("ciphersuite not supported");
             System.exit(1);
         }
-        
+
         try {
             if (cm.FIPSEnabled() && !SSLSocket.isFipsCipherSuite(aCipher)) {
                 System.out.println("You are trying to test a non FIPS " +
@@ -340,7 +366,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
         //note all ciphers are disabled but the ciphersuite to be tested
         //will only be enabled in the method createSSLSocket
     }
-    
+
     /**
      * Initialize the hostname to run the server
      * @param aHostName
@@ -348,7 +374,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
     public void setHostName(String aHostName) {
         serverHost = aHostName;
     }
-    
+
     /**
      * Initialize the port to run the server
      * @param aPort
@@ -356,7 +382,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
     public void setPort(int aPort) {
         port = aPort;
     }
-    
+
     /**
      * Initialize the passwords file name
      * @param aPasswordFile
@@ -364,7 +390,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
     public void setPasswordFile(String aPasswordFile) {
         fPasswordFile = aPasswordFile;
     }
-    
+
     /**
      * Initialize the cert db path name
      * @param aCertDbPath
@@ -372,7 +398,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
     public void setCertDbPath(String aCertDbPath) {
         fCertDbPath = aCertDbPath;
     }
-    
+
     /**
      * Enable/disable Test Cert Callback.
      * @param aTestCertCallback
@@ -380,7 +406,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
     public void setTestCertCallback(boolean aTestCertCallback) {
         TestCertCallBack = aTestCertCallback;
     }
-    
+
     /**
      * Set client certificate
      * @param aClientCertNick Certificate Nick Name
@@ -506,8 +532,8 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
             return; /* JSS already initialized */
         }
         try {
-            CryptoManager.InitializationValues vals = new
-                    CryptoManager.InitializationValues(fCertDbPath);
+            InitializationValues vals = new
+                    InitializationValues(fCertDbPath);
             CryptoManager.initialize(vals);
             cm  = CryptoManager.getInstance();
 
@@ -519,16 +545,14 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
             cb  = new FilePasswordCallback(fPasswordFile);
             tok.login(cb);
             bJSS = true;
-            if (bVerbose) {
-                Debug.setLevel(Debug.OBNOXIOUS);
-            }
+
         }catch (KeyDatabaseException ex) {
             ex.printStackTrace();
             System.exit(1);
         } catch (CertDatabaseException ex) {
             ex.printStackTrace();
             System.exit(1);
-        } catch (CryptoManager.NotInitializedException ex) {
+        } catch (NotInitializedException ex) {
             ex.printStackTrace();
             System.exit(1);
         } catch (IOException ex) {
@@ -620,9 +644,9 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
         try {
             SSLSocket s;
             long start = System.currentTimeMillis();
-            Iterator sIter = sockList.iterator();
+            Iterator<SSLSocket> sIter = sockList.iterator();
             while (sIter.hasNext()) {
-                s = (SSLSocket) sIter.next();
+                s = sIter.next();
                 s.close();
             }
 
@@ -772,9 +796,9 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
                         " ciphersuites successfully connected to the "+
                         "server\n");
             }
-            Iterator iter = h_ciphers.iterator();
+            Iterator<String> iter = h_ciphers.iterator();
             while (iter.hasNext()) {
-                System.out.println((String) iter.next());
+                System.out.println(iter.next());
 
             }
         }
@@ -792,9 +816,9 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
             System.out.println(f_ciphers.size() +
                     " ciphersuites that did not connect to the "+
                     "server\n\n");
-            Iterator iter = f_ciphers.iterator();
+            Iterator<String> iter = f_ciphers.iterator();
             while (iter.hasNext()) {
-                System.out.println((String) iter.next());
+                System.out.println(iter.next());
 
             }
             System.out.println("we should have no failed ciphersuites!");
@@ -908,7 +932,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
                 "\n\nOptional:\n" +
                 "[certdb path] [password file] [server host] [server port]" +
                 "[verbose] [server = JSS or JSSE] [ClientCert]";
-        
+
         try {
             if (args.length <= 0 ||
                     args[0].toLowerCase().equals("-h")) {
@@ -927,13 +951,13 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
                 }
             }
             if (args.length >= 3) {
-                certDbPath = (String)args[2];
+                certDbPath = args[2];
             }
             if (args.length >= 4) {
-                passwdFile = (String)args[3];
+                passwdFile = args[3];
             }
             if (args.length >= 5) {
-                testhost   = (String)args[4];
+                testhost   = args[4];
             }
             if (args.length >= 6) {
                 testport   = new Integer(args[5]).intValue();
@@ -944,11 +968,11 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
                 bVerbose = true;
             }
             if (args.length >= 8) {
-                
+
                 server = args[7].toUpperCase();
             }
             if (args.length >=9) {
-                certnick = (String)args[8];
+                certnick = args[8];
                 System.out.println("certnickname: " + certnick);
             }
 
@@ -957,7 +981,7 @@ public class JSS_SelfServClient implements ConstantsBase, Constants {
             System.out.println("Unknown exception : " + e.getMessage());
             System.exit(1);
         }
-        
+
         System.out.println("Client connecting to server: " + testhost +
                 ":" + testport);
 

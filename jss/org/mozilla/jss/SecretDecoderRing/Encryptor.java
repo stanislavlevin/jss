@@ -8,12 +8,11 @@ import java.security.*;
 import javax.crypto.*;
 import javax.crypto.spec.*;
 import org.mozilla.jss.asn1.*;
-import org.mozilla.jss.pkix.primitive.*;
 import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.NotInitializedException;
 import org.mozilla.jss.crypto.CryptoToken;
 import org.mozilla.jss.crypto.EncryptionAlgorithm;
 import org.mozilla.jss.crypto.TokenException;
-import java.io.*;
 
 /**
  * Encrypts data with the SecretDecoderRing.
@@ -73,7 +72,7 @@ public class Encryptor {
      *  SecretDecoderRing.
      */
     public byte[] encrypt(byte[] plaintext) throws
-            CryptoManager.NotInitializedException,
+            NotInitializedException,
             GeneralSecurityException,
             InvalidBERException
     {

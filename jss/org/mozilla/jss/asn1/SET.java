@@ -3,15 +3,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss.asn1;
 
-import java.math.BigInteger;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Vector;
+
 import org.mozilla.jss.util.Assert;
-import java.io.FileInputStream;
-import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
 
 /**
  * An ASN.1 SET, which is an unordered collection of ASN.1 values.
@@ -28,7 +28,7 @@ public class SET implements ASN1Value {
     protected static final Form FORM = Form.CONSTRUCTED;
 
     // The elements of the set
-    protected Vector elements = new Vector();
+    protected Vector<Element> elements = new Vector<>();
 
     private void addElement( Element e ) {
         elements.addElement(e);
@@ -40,6 +40,7 @@ public class SET implements ASN1Value {
 
     /**
      * Adds an element to this SET.
+     * @param v Element.
      */
     public void addElement( ASN1Value v ) {
         addElement( new Element(v) );
@@ -58,6 +59,8 @@ public class SET implements ASN1Value {
      * <pre>
      * myTypeInstance.addElement( new Tag(0), new INTEGER(45) );
      * </pre>
+     * @param implicitTag Implicit tag.
+     * @param v Element.
      */
     public void addElement( Tag implicitTag, ASN1Value v ) {
         addElement( new Element(implicitTag, v) );
@@ -65,6 +68,8 @@ public class SET implements ASN1Value {
 
     /**
      * Inserts an element at the given index.
+     * @param v Element.
+     * @param index Index.
      */
     public void insertElementAt( ASN1Value v, int index ) {
         insertElementAt( new Element(v), index );
@@ -72,6 +77,9 @@ public class SET implements ASN1Value {
 
     /**
      * Inserts an element with the given implicit tag at the given index.
+     * @param implicitTag Implicit tag.
+     * @param v Element.
+     * @param index Index.
      */
     public void insertElementAt( Tag implicitTag, ASN1Value v, int index ) {
         insertElementAt( new Element(implicitTag, v), index );
@@ -79,18 +87,22 @@ public class SET implements ASN1Value {
 
     /**
      * Returns the element at the given index in the SET.
+     * @param index Index.
+     * @return Element.
      */
     public ASN1Value elementAt( int index ) {
-        return ((Element)elements.elementAt(index)).getValue();
+        return elements.elementAt(index).getValue();
     }
 
     /**
      * Returns the tag of the element at the given index. If the element
      * has an implicit tag, that is returned.  Otherwise, the tag of the
      * underlying type is returned.
+     * @param index Index.
+     * @return Tag.
      */
      public Tag tagAt( int index ) {
-        Tag implicit = ((Element)elements.elementAt(index)).getImplicitTag();
+        Tag implicit = elements.elementAt(index).getImplicitTag();
         if( implicit != null ) {
             return implicit;
         } else {
@@ -101,13 +113,15 @@ public class SET implements ASN1Value {
     /**
      * Returns the element with the given Tag, or null if no element exists
      * with the given tag.
+     * @param tag Tag.
+     * @return Element.
      */
     public ASN1Value elementWithTag( Tag tag ) {
         // hmmm...linear search for now, should use hashtable later
 
         int size = elements.size();
         for( int i=0; i < size; i++ ) {
-            Element e = (Element) elements.elementAt(i);
+            Element e = elements.elementAt(i);
             if( e.getTag().equals(tag) ) {
                 return e.getValue();
             }
@@ -116,7 +130,7 @@ public class SET implements ASN1Value {
     }
 
     /**
-     * Returns the number of elements in this SET.
+     * @return The number of elements in this SET.
      */
     public int size() {
         return elements.size();
@@ -131,6 +145,7 @@ public class SET implements ASN1Value {
 
     /**
      * Removes the element from the specified index.
+     * @param index Index.
      */
     public void removeElementAt(int index) {
         elements.removeElementAt(index);
@@ -138,6 +153,7 @@ public class SET implements ASN1Value {
 
     /**
      * Writes the DER encoding to the given output stream.
+     * @param ostream Output stream.
      */
     public void encode(OutputStream ostream)
         throws IOException
@@ -149,6 +165,8 @@ public class SET implements ASN1Value {
      * Writes the DER encoding to the given output stream,
      * using the given implicit tag. To satisfy DER encoding rules,
      * the elements will be re-ordered either by tag or lexicographically.
+     * @param implicitTag Implicit tag.
+     * @param ostream Output stream.
      */
     public void encode(Tag implicitTag, OutputStream ostream)
         throws IOException
@@ -169,8 +187,8 @@ public class SET implements ASN1Value {
         // compute and order contents
         int numElements = elements.size();
         int totalBytes = 0;
-        Vector encodings = new Vector(numElements);
-        Vector tags = new Vector(numElements);
+        Vector<byte[]> encodings = new Vector<>(numElements);
+        Vector<Integer> tags = new Vector<>(numElements);
         int i;
         for(i = 0; i < numElements; i++ ) {
 
@@ -194,13 +212,16 @@ public class SET implements ASN1Value {
 
         // write contents in order
         for(i=0; i < numElements; i++ ) {
-            ostream.write( (byte[]) encodings.elementAt(i) );
+            ostream.write( encodings.elementAt(i) );
         }
     }
 
     /**
      * Encodes this SET without re-ordering it.  This may violate
      * DER, but it is within BER.
+     * @param implicitTag Implicit tag.
+     * @param ostream Output stream.
+     * @throws IOException If an error occurred.
      */
     public void BERencode(Tag implicitTag, OutputStream ostream)
         throws IOException
@@ -228,13 +249,13 @@ public class SET implements ASN1Value {
 
     // performs ascending lexicographic ordering
     // linear search, but number of items is usually going to be small.
-    private static void insertInOrder(Vector encs, byte[] enc) {
+    private static void insertInOrder(Vector<byte[]> encs, byte[] enc) {
         int size = encs.size();
 
         // find the lowest item that we are less than or equal to
         int i;
         for(i=0; i < size; i++) {
-            if( compare(enc, (byte[])encs.elementAt(i)) < 1 ) {
+            if( compare(enc, encs.elementAt(i)) < 1 ) {
                 break;
             }
         }
@@ -245,7 +266,7 @@ public class SET implements ASN1Value {
 
     // performs ascending ordering by tag
     // linear search, but number of items is usually going to be small.
-    private static void insertInOrder(Vector encs, byte[] enc, Vector tags,
+    private static void insertInOrder(Vector<byte[]> encs, byte[] enc, Vector<Integer> tags,
                 int tag)
     {
         int size = encs.size();
@@ -253,7 +274,7 @@ public class SET implements ASN1Value {
         // find the lowest item that we are less than or equal to
         int i;
         for(i = 0; i < size; i++) {
-            if( tag <= ((Integer)tags.elementAt(i)).intValue() ) {
+            if( tag <= tags.elementAt(i).intValue() ) {
                 break;
             }
         }
@@ -348,7 +369,7 @@ public class SET implements ASN1Value {
  */
 public static class Template implements ASN1Template {
 
-    private Vector elements = new Vector();
+    private Vector<Element> elements = new Vector<>();
 
     private void addElement( Element e ) {
         elements.addElement(e);
@@ -370,6 +391,7 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySet.addElement( new SubType.Template() );
      * </pre>
+     * @param t Sub-template.
      */
     public void addElement( ASN1Template t ) {
         addElement( new Element(TAG, t, false) );
@@ -377,6 +399,8 @@ public static class Template implements ASN1Template {
 
     /**
      * Inserts the template at the given index.
+     * @param t Sub-template.
+     * @param index Index.
      */
     public void insertElementAt( ASN1Template t, int index )
     {
@@ -395,6 +419,8 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySet.addElement( new Tag(0), new SubType.Template() );
      * </pre>
+     * @param implicit Implicit tag.
+     * @param t Sub-template.
      */
     public void addElement( Tag implicit, ASN1Template t ) {
         addElement( new Element(implicit, t, false) );
@@ -402,6 +428,9 @@ public static class Template implements ASN1Template {
 
     /**
      * Inserts the template with the given implicit tag at the given index.
+     * @param implicit Implicit tag.
+     * @param t Sub-template.
+     * @param index Index.
      */
     public void insertElementAt( Tag implicit, ASN1Template t,
         int index )
@@ -421,6 +450,7 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySet.addOptionalElement( new SubType.Template() );
      * </pre>
+     * @param t Optional sub-template.
      */
     public void addOptionalElement( ASN1Template t ) {
         addElement( new Element(TAG, t, true) );
@@ -428,6 +458,8 @@ public static class Template implements ASN1Template {
 
     /**
      * Inserts the optional template at the given index.
+     * @param t Optional sub-template.
+     * @param index Index.
      */
     public void insertOptionalElementAt( ASN1Template t, int index )
     {
@@ -446,6 +478,8 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySet.addOptionalElement( new Tag(0), new SubType.Template() );
      * </pre>
+     * @param implicit Implicit tag.
+     * @param t Optional sub-template.
      */
     public void addOptionalElement( Tag implicit, ASN1Template t ) {
         addElement( new Element(implicit, t, true) );
@@ -454,6 +488,9 @@ public static class Template implements ASN1Template {
     /**
      * Inserts the optional template with the given default
      * value at the given index.
+     * @param implicit Implicit tag.
+     * @param t Optional sub-template.
+     * @param index Index.
      */
     public void insertOptionalElementAt( Tag implicit, ASN1Template t,
         int index )
@@ -474,6 +511,8 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySet.addElement( new SubType.Template(), new INTEGER(5) );
      * </pre>
+     * @param t Sub-template.
+     * @param def Default value.
      */
     public void addElement( ASN1Template t, ASN1Value def ) {
         addElement( new Element(TAG, t, def) );
@@ -482,6 +521,9 @@ public static class Template implements ASN1Template {
     /**
      * Inserts the template with the given default
      * value at the given index.
+     * @param t Sub-template.
+     * @param def Default value.
+     * @param index Index.
      */
     public void insertElementAt( ASN1Template t, ASN1Value def, int index )
     {
@@ -500,6 +542,9 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySet.addElement( new Tag(0), new SubType.Template(), new INTEGER(5) );
      * </pre>
+     * @param implicit Implicit tag.
+     * @param t Sub-template.
+     * @param def Default value.
      */
     public void addElement( Tag implicit, ASN1Template t, ASN1Value def ) {
         addElement( new Element(implicit, t, def) );
@@ -508,6 +553,10 @@ public static class Template implements ASN1Template {
     /**
      * Inserts the template with the given implicit tag and given default
      * value at the given index.
+     * @param implicit Implicit tag.
+     * @param t Sub-template.
+     * @param def Default value.
+     * @param index Index.
      */
     public void insertElementAt( Tag implicit, ASN1Template t, ASN1Value def,
         int index )
@@ -518,40 +567,48 @@ public static class Template implements ASN1Template {
     /**
      * Returns the implicit tag of the item stored at the given index.
      * May be NULL if no implicit tag was specified.
+     * @param index Index.
+     * @return Implicit tag.
      */
     public Tag implicitTagAt(int index) {
-        return ((Element)elements.elementAt(index)).getImplicitTag();
+        return elements.elementAt(index).getImplicitTag();
     }
 
     /**
      * Returns the sub-template stored at the given index.
+     * @param index Index.
+     * @return Sub-template.
      */
     public ASN1Template templateAt(int index) {
-        return ((Element)elements.elementAt(index)).getTemplate();
+        return elements.elementAt(index).getTemplate();
     }
 
     /**
      * Returns <code>true</code> if the sub-template at the given index
      * is optional.
+     * @param index Index.
+     * @return True if sub-template is optional.
      */
     public boolean isOptionalAt(int index) {
-        return ((Element)elements.elementAt(index)).isOptional();
+        return elements.elementAt(index).isOptional();
     }
 
     private boolean isRepeatableAt(int index) {
-        return ((Element)elements.elementAt(index)).isRepeatable();
+        return elements.elementAt(index).isRepeatable();
     }
 
     /**
      * Returns the default value for the sub-template at the given index.
      * May return NULL if no default value was specified.
+     * @param index Index.
+     * @return Default value.
      */
     public ASN1Value defaultAt(int index) {
-        return ((Element)elements.elementAt(index)).getDefault();
+        return elements.elementAt(index).getDefault();
     }
 
     /**
-     * Returns the number of elements in the SET.
+     * @return The number of elements in the SET.
      */
     public int size() {
         return elements.size();
@@ -571,6 +628,8 @@ public static class Template implements ASN1Template {
 
     /**
      * Determines whether the given tag satisfies this template.
+     * @param tag Tag.
+     * @return True if tag satisfies this template.
      */
     public boolean tagMatch(Tag tag) {
         return( tag.equals(SET.TAG) );
@@ -578,6 +637,8 @@ public static class Template implements ASN1Template {
 
     /**
      * Decodes the input stream into a SET value.
+     * @param istream Input stream.
+     * @return Decoded SET value.
      */
     public ASN1Value decode(InputStream istream)
         throws IOException, InvalidBERException
@@ -588,6 +649,9 @@ public static class Template implements ASN1Template {
     /**
      * Decodes the input stream into a SET value with the given implicit
      *  tag.
+     * @param tag Implicit tag.
+     * @param istream Input stream.
+     * @return Decoded SET value.
      */
     public ASN1Value decode(Tag tag, InputStream istream)
         throws IOException, InvalidBERException
@@ -602,7 +666,7 @@ public static class Template implements ASN1Template {
         SET set = new SET();
         ASN1Header lookAhead;
         boolean[] found = new boolean[ elements.size() ];
-        
+
         // while content remains, try to decode it
         while( remainingContent > 0  || remainingContent == -1) {
 
@@ -626,7 +690,7 @@ public static class Template implements ASN1Template {
                 throw new InvalidBERException("Unexpected Tag in SET: "+
                     lookAhead.getTag() );
             }
-            Element e = (Element) elements.elementAt(index);
+            Element e = elements.elementAt(index);
             if( found[index] && ! e.isRepeatable() ) {
                 // element already found, and it's not repeatable
                 throw new InvalidBERException("Duplicate Tag in SET: "+
@@ -639,23 +703,26 @@ public static class Template implements ASN1Template {
             // Decode this element
             ASN1Template t = e.getTemplate();
             ASN1Value val;
-            CountingStream countstream = new CountingStream(istream);
-            if( e.getImplicitTag() == null ) {
-                val = t.decode(countstream);
-            } else {
-                val = t.decode(e.getImplicitTag(), countstream);
-            }
 
-            // Decrement remaining count
-            long len = countstream.getNumRead();
-            if( remainingContent != -1 ) {
-                if( remainingContent < len ) {
-                    // this item went past the end of the SET
-                    throw new InvalidBERException("Item went "+
-                        (len-remainingContent)+" bytes past the end of"+
-                        " the SET");
+            try (CountingStream countstream = new CountingStream(istream)) {
+
+                if (e.getImplicitTag() == null) {
+                    val = t.decode(countstream);
+                } else {
+                    val = t.decode(e.getImplicitTag(), countstream);
                 }
-                remainingContent -= len;
+
+                // Decrement remaining count
+                long len = countstream.getNumRead();
+                if (remainingContent != -1) {
+                    if (remainingContent < len) {
+                        // this item went past the end of the SET
+                        throw new InvalidBERException("Item went "+
+                            (len-remainingContent) + " bytes past the end of" +
+                            " the SET");
+                    }
+                    remainingContent -= len;
+                }
             }
 
             // Store this element in the SET
@@ -701,12 +768,13 @@ public static class Template implements ASN1Template {
      * or -1 if not found.
      * lame linear search - but we're dealing with small numbers of elements,
      * so it's probably not worth it to use a hashtable
+     * @param tag Tag.
      */
     private int findElementByTag(Tag tag) {
         int size = elements.size();
 
         for( int i = 0; i < size ; i++ ) {
-            Element e = (Element) elements.elementAt(i);
+            Element e = elements.elementAt(i);
             if( e.tagMatch( tag ) ) {
                 // match!
                 return i;
@@ -759,6 +827,8 @@ public static class Template implements ASN1Template {
 
         /**
          * Determines whether the given tag satisfies this SET element.
+         * @param tag Tag.
+         * @return True if tag satisfies SET.
          */
         public boolean tagMatch(Tag tag) {
             if( implicitTag != null ) {
@@ -770,7 +840,7 @@ public static class Template implements ASN1Template {
 
         private ASN1Template type;
         /**
-         * Returns the template for this element.
+         * @return The template for this element.
          */
         public ASN1Template getTemplate() {
             return type;
@@ -780,6 +850,7 @@ public static class Template implements ASN1Template {
         /**
          * Returns the default value for this element, if one exists.
          * Otherwise, returns null.
+         * @return Default value.
          */
         public ASN1Value getDefault() {
             return defaultVal;
@@ -797,8 +868,6 @@ public static class Template implements ASN1Template {
  */
 public static class OF_Template implements ASN1Template {
 
-    private OF_Template() { }
-
     private Template template;  // a normal SET template
 
     /**
@@ -811,6 +880,7 @@ public static class OF_Template implements ASN1Template {
      * SET.OF_Template mySetTemplate = new SET.OF_Template( new
      *                                          INTEGER.Template() );
      * </pre>
+     * @param type Type.
      */
     public OF_Template(ASN1Template type) {
         template = new Template();
@@ -850,8 +920,6 @@ public static class OF_Template implements ASN1Template {
 
         if(args.length > 0) {
 
-        FileInputStream fin = new FileInputStream( args[0] );
-
         Template t = new SET.Template();
 
         t.addElement(new Tag(0), new INTEGER.Template() );
@@ -863,7 +931,12 @@ public static class OF_Template implements ASN1Template {
         t.addElement( new Tag(1), new INTEGER.Template() );
         t.addElement( new Tag(2), new INTEGER.Template() );
 
-        SET st = (SET) t.decode(new BufferedInputStream(fin) );
+        SET st;
+
+        FileInputStream fin = new FileInputStream(args[0]);
+        try (BufferedInputStream is = new BufferedInputStream(fin)) {
+            st = (SET) t.decode(is);
+        }
 
         for(int i=0; i < st.size(); i++) {
             ASN1Value v = st.elementAt(i);

@@ -4,12 +4,37 @@
 
 package org.mozilla.jss.pkcs11;
 
-import java.util.*;
-import org.mozilla.jss.util.*;
-import org.mozilla.jss.crypto.*;
-import java.security.NoSuchAlgorithmException;
 import java.security.InvalidKeyException;
 import java.security.InvalidParameterException;
+import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
+
+import org.mozilla.jss.crypto.Algorithm;
+import org.mozilla.jss.crypto.AlreadyInitializedException;
+import org.mozilla.jss.crypto.Cipher;
+import org.mozilla.jss.crypto.CryptoStore;
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.crypto.DigestAlgorithm;
+import org.mozilla.jss.crypto.EncryptionAlgorithm;
+import org.mozilla.jss.crypto.JSSMessageDigest;
+import org.mozilla.jss.crypto.KeyGenAlgorithm;
+import org.mozilla.jss.crypto.KeyGenerator;
+import org.mozilla.jss.crypto.KeyPairAlgorithm;
+import org.mozilla.jss.crypto.KeyPairGenerator;
+import org.mozilla.jss.crypto.KeyWrapAlgorithm;
+import org.mozilla.jss.crypto.KeyWrapper;
+import org.mozilla.jss.crypto.PQGParamGenException;
+import org.mozilla.jss.crypto.PQGParams;
+import org.mozilla.jss.crypto.SignatureAlgorithm;
+import org.mozilla.jss.crypto.SymmetricKey;
+import org.mozilla.jss.crypto.TokenException;
+import org.mozilla.jss.util.Assert;
+import org.mozilla.jss.util.IncorrectPasswordException;
+import org.mozilla.jss.util.NotImplementedException;
+import org.mozilla.jss.util.NullPasswordCallback;
+import org.mozilla.jss.util.Password;
+import org.mozilla.jss.util.PasswordCallback;
+import org.mozilla.jss.util.PasswordCallbackInfo;
 
 /**
  * A PKCS #11 token.  Currently, these can only be obtained from the
@@ -21,6 +46,12 @@ import java.security.InvalidParameterException;
  */
 public final class PK11Token implements CryptoToken {
 
+    protected TokenProxy tokenProxy;
+    protected PK11Store cryptoStore;
+
+    protected boolean mIsInternalCryptoToken;
+    protected boolean mIsInternalKeyStorageToken;
+
     ////////////////////////////////////////////////////
     //  exceptions
     ////////////////////////////////////////////////////
@@ -29,8 +60,9 @@ public final class PK11Token implements CryptoToken {
      * isn't.
      */
     static public class NotInitializedException
-		extends IncorrectPasswordException
-	{
+            extends IncorrectPasswordException
+    {
+        private static final long serialVersionUID = 1L;
         public NotInitializedException() {}
         public NotInitializedException(String mesg) {super(mesg);}
     }
@@ -38,37 +70,37 @@ public final class PK11Token implements CryptoToken {
     ////////////////////////////////////////////////////
     //  public routines
     ////////////////////////////////////////////////////
-	public org.mozilla.jss.crypto.Signature
-	getSignatureContext(SignatureAlgorithm algorithm)
-		throws NoSuchAlgorithmException, TokenException
-	{
+    public org.mozilla.jss.crypto.Signature
+    getSignatureContext(SignatureAlgorithm algorithm)
+            throws NoSuchAlgorithmException, TokenException
+    {
         Assert._assert(algorithm!=null);
-		return Tunnel.constructSignature( algorithm,
-                    new PK11Signature(this, algorithm) );
-	}
+        return Tunnel.constructSignature( algorithm,
+                new PK11Signature(this, algorithm) );
+    }
 
-	public JSSMessageDigest
-	getDigestContext(DigestAlgorithm algorithm)
-		throws NoSuchAlgorithmException,
-                java.security.DigestException
-	{
+    public JSSMessageDigest
+    getDigestContext(DigestAlgorithm algorithm)
+            throws NoSuchAlgorithmException,
+            java.security.DigestException
+    {
         if( ! doesAlgorithm(algorithm) ) {
             throw new NoSuchAlgorithmException();
         }
 
         return new PK11MessageDigest(this, algorithm);
-	}
+    }
 
-	public Cipher
-	getCipherContext(EncryptionAlgorithm algorithm)
-		throws NoSuchAlgorithmException, TokenException
-	{
+    public Cipher
+    getCipherContext(EncryptionAlgorithm algorithm)
+            throws NoSuchAlgorithmException, TokenException
+    {
         if( ! doesAlgorithm(algorithm) ) {
             throw new NoSuchAlgorithmException(
                 algorithm+" is not supported by this token");
         }
         return new PK11Cipher(this, algorithm);
-	}
+    }
 
     public KeyGenerator
     getKeyGenerator(KeyGenAlgorithm algorithm)
@@ -118,21 +150,21 @@ public final class PK11Token implements CryptoToken {
         return new PK11KeyWrapper(this, algorithm);
     }
 
-	public java.security.SecureRandom
-	getRandomGenerator()
-		throws NotImplementedException, TokenException
-	{
-		throw new NotImplementedException();
-	}
+    public java.security.SecureRandom
+    getRandomGenerator()
+            throws NotImplementedException, TokenException
+    {
+        throw new NotImplementedException();
+    }
 
-	public org.mozilla.jss.crypto.KeyPairGenerator
-	getKeyPairGenerator(KeyPairAlgorithm algorithm)
-		throws NoSuchAlgorithmException, TokenException
-	{
+    public org.mozilla.jss.crypto.KeyPairGenerator
+    getKeyPairGenerator(KeyPairAlgorithm algorithm)
+            throws NoSuchAlgorithmException, TokenException
+    {
         Assert._assert(algorithm!=null);
         return new KeyPairGenerator(algorithm,
-                                    new PK11KeyPairGenerator(this, algorithm));
-	}
+                new PK11KeyPairGenerator(this, algorithm));
+    }
 
     public native boolean isLoggedIn() throws TokenException;
 
@@ -384,8 +416,7 @@ public final class PK11Token implements CryptoToken {
 
 	public java.security.Provider
 	getProvider() {
-		Assert.notYetImplemented("Providers not implemented by PK11Token yet");
-		return null;
+	    throw new RuntimeException("PK11Token.getProvider() is not yet implemented");
 	}
 
 	public CryptoStore
@@ -532,10 +563,9 @@ public final class PK11Token implements CryptoToken {
 	}
 */
 
-	public TokenProxy getProxy() {
-		return tokenProxy;
-	}
-
+    public TokenProxy getProxy() {
+        return tokenProxy;
+    }
 
     /**
      * @return true if this is the internal token used for bulk crypto.
@@ -543,7 +573,6 @@ public final class PK11Token implements CryptoToken {
     public boolean isInternalCryptoToken() {
         return mIsInternalCryptoToken;
     }
-    protected boolean mIsInternalCryptoToken;
 
     /**
      * @return true if this is the internal key storage token.
@@ -551,19 +580,11 @@ public final class PK11Token implements CryptoToken {
     public boolean isInternalKeyStorageToken() {
         return mIsInternalKeyStorageToken;
     }
-    protected boolean mIsInternalKeyStorageToken;
-
-    //////////////////////////////////////////////////
-    // Private Data
-    //////////////////////////////////////////////////
-    protected TokenProxy tokenProxy;
-
-    protected PK11Store cryptoStore;
 
     public native void importPublicKey(
-        org.mozilla.jss.pkcs11.PK11PubKey pubKey,
-        boolean permanent)
-        throws TokenException;
+            PublicKey pubKey,
+            boolean permanent)
+            throws TokenException;
 }
 
 /**

@@ -4,10 +4,13 @@
 
 package org.mozilla.jss.tests;
 
-import org.mozilla.jss.*;
-import org.mozilla.jss.pkcs11.*;
-import org.mozilla.jss.crypto.*;
-import java.io.*;
+import java.util.Enumeration;
+
+import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.InitializationValues;
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.pkcs11.PK11Module;
+import org.mozilla.jss.pkcs11.PK11Token;
 import org.mozilla.jss.util.PasswordCallback;
 
 
@@ -32,8 +35,8 @@ public class FipsTest {
            System.out.println("The password file " +password);
         }
 
-        CryptoManager.InitializationValues vals = new
-                CryptoManager.InitializationValues(dbdir);
+        InitializationValues vals = new
+                InitializationValues(dbdir);
 
         System.out.println("output of Initilization values ");
         System.out.println("Manufacturer ID: " + vals.getManufacturerID());
@@ -53,13 +56,13 @@ public class FipsTest {
 
 
         if (fipsmode.equalsIgnoreCase("enable")) {
-            vals.fipsMode = CryptoManager.InitializationValues.FIPSMode.ENABLED;
+            vals.fipsMode = InitializationValues.FIPSMode.ENABLED;
         } else if (fipsmode.equalsIgnoreCase("disable")){
             vals.fipsMode =
-                    CryptoManager.InitializationValues.FIPSMode.DISABLED;
+                    InitializationValues.FIPSMode.DISABLED;
         } else {
             vals.fipsMode =
-                    CryptoManager.InitializationValues.FIPSMode.UNCHANGED;
+                    InitializationValues.FIPSMode.UNCHANGED;
         }
 
         CryptoManager.initialize(vals);
@@ -73,20 +76,19 @@ public class FipsTest {
         }
 
 
-        java.util.Enumeration items;
-        items = cm.getModules();
+        Enumeration<PK11Module> modules = cm.getModules();
         System.out.println("\nListing of Modules:");
-        while(items.hasMoreElements()) {
+        while (modules.hasMoreElements()) {
             System.out.println("\t"+
-            ((PK11Module)items.nextElement()).getName() );
+            modules.nextElement().getName() );
         }
         CryptoToken tok;
         String tokenName;
 
-        items = cm.getAllTokens();
+        Enumeration<CryptoToken> tokens = cm.getAllTokens();
         System.out.println("\nAll Tokens:");
-        while(items.hasMoreElements()) {
-            tok = (CryptoToken)items.nextElement();
+        while (tokens.hasMoreElements()) {
+            tok = tokens.nextElement();
 
             System.out.print("\t" + tok.getName());
             if (tok.needsLogin() == true){
@@ -96,11 +98,11 @@ public class FipsTest {
             }
         }
 
-        items = cm.getExternalTokens();
+        tokens = cm.getExternalTokens();
         System.out.println("\nExternal Tokens:");
-        while(items.hasMoreElements()) {
+        while(tokens.hasMoreElements()) {
             System.out.println("\t"+
-            ((CryptoToken)items.nextElement()).getName() );
+            tokens.nextElement().getName() );
         }
 
         /* find the Internal Key Storage token */

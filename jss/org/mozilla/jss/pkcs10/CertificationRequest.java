@@ -4,25 +4,38 @@
 
 package org.mozilla.jss.pkcs10;
 
-import org.mozilla.jss.asn1.*;
-import org.mozilla.jss.pkix.primitive.*;
-import org.mozilla.jss.crypto.*;
-import org.mozilla.jss.CryptoManager;
-import java.security.cert.CertificateException;
-import java.security.NoSuchAlgorithmException;
-import java.security.InvalidKeyException;
-import java.security.SignatureException;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.IOException;
-import java.security.PublicKey;
-import java.security.KeyPair;
-import java.util.Date;
-import java.util.Calendar;
-
 import java.io.BufferedInputStream;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.security.InvalidKeyException;
+import java.security.KeyPair;
+import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
+import java.security.SignatureException;
+import java.security.cert.CertificateException;
+
+import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.NotInitializedException;
+import org.mozilla.jss.asn1.ASN1Template;
+import org.mozilla.jss.asn1.ASN1Util;
+import org.mozilla.jss.asn1.ASN1Value;
+import org.mozilla.jss.asn1.BIT_STRING;
+import org.mozilla.jss.asn1.InvalidBERException;
+import org.mozilla.jss.asn1.SEQUENCE;
+import org.mozilla.jss.asn1.Tag;
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.crypto.InvalidKeyFormatException;
+import org.mozilla.jss.crypto.KeyPairAlgorithm;
+import org.mozilla.jss.crypto.KeyPairGenerator;
+import org.mozilla.jss.crypto.PrivateKey;
+import org.mozilla.jss.crypto.Signature;
+import org.mozilla.jss.crypto.SignatureAlgorithm;
+import org.mozilla.jss.crypto.TokenException;
+import org.mozilla.jss.pkix.primitive.AlgorithmIdentifier;
+import org.mozilla.jss.pkix.primitive.Name;
 
 /**
  * A pkcs10 signed CertificationRequest.
@@ -35,9 +48,7 @@ public class CertificationRequest implements ASN1Value {
     private AlgorithmIdentifier algId;
     SEQUENCE sequence;
 
-    private CertificationRequest() { }
-
-    CertificationRequest(CertificationRequestInfo info, 
+    CertificationRequest(CertificationRequestInfo info,
 						 //byte[] infoEncoding,
             AlgorithmIdentifier algId, byte[] signature) throws IOException
     {
@@ -55,7 +66,7 @@ public class CertificationRequest implements ASN1Value {
 
     /**
      * Creates and signs an X.509 CertificationRequest.
-     * @param info A CertificationRequestInfo (TBSCertificationRequest), 
+     * @param info A CertificationRequestInfo (TBSCertificationRequest),
      *      which specifies
      *      the actual information of the CertificationRequest.
      * @param privKey The private key with which to sign the certificate.
@@ -63,7 +74,7 @@ public class CertificationRequest implements ASN1Value {
      *      It must match the algorithm specified in the CertificationRequestInfo.
      * @exception IOException If an error occurred while encoding the
      *      CertificationRequest.
-     * @exception CryptoManager.NotInitializedException Because this
+     * @exception NotInitializedException Because this
      *      operation involves cryptography (signing), CryptoManager must
      *      be initialized before calling it.
      * @exception TokenException If an error occurs on a PKCS #11 token.
@@ -78,7 +89,7 @@ public class CertificationRequest implements ASN1Value {
      */
     public CertificationRequest(CertificationRequestInfo info, java.security.PrivateKey privKey,
                 SignatureAlgorithm signingAlg)
-        throws IOException, CryptoManager.NotInitializedException,
+        throws IOException, NotInitializedException,
             TokenException, NoSuchAlgorithmException, CertificateException,
             InvalidKeyException, SignatureException
     {
@@ -89,7 +100,7 @@ public class CertificationRequest implements ASN1Value {
         }
         PrivateKey priv = (PrivateKey)privKey;
 
-        // create algId 
+        // create algId
         if(signingAlg.getSigningAlg() == SignatureAlgorithm.RSASignature) {
             algId = new AlgorithmIdentifier( signingAlg.toOID(), null );
         } else {
@@ -99,7 +110,7 @@ public class CertificationRequest implements ASN1Value {
         // encode the cert info
         this.info = info;
         infoEncoding = ASN1Util.encode(info);
-        
+
         // sign the info encoding
         CryptoManager cm = CryptoManager.getInstance();
         CryptoToken token = priv.getOwningToken();
@@ -120,7 +131,7 @@ public class CertificationRequest implements ASN1Value {
      * that the CertificationRequest is valid at any specific time.
      */
     public void verify()
-        throws InvalidKeyException, CryptoManager.NotInitializedException,
+        throws InvalidKeyException, NotInitializedException,
         NoSuchAlgorithmException, CertificateException, TokenException,
         SignatureException, InvalidKeyFormatException
     {
@@ -132,7 +143,7 @@ public class CertificationRequest implements ASN1Value {
      * Does not indicate the CertificationRequest is valid at any specific time.
      */
     public void verify(PublicKey key)
-        throws InvalidKeyException, CryptoManager.NotInitializedException,
+        throws InvalidKeyException, NotInitializedException,
         NoSuchAlgorithmException, CertificateException, TokenException,
         SignatureException
     {
@@ -249,12 +260,13 @@ public class CertificationRequest implements ASN1Value {
         CryptoManager.initialize( argv[0] );
         CryptoManager cm = CryptoManager.getInstance();
 
-        // read in a cert
-        BufferedInputStream bis = new BufferedInputStream(
-                new FileInputStream(argv[1]) );
+        CertificationRequest cert;
 
-        CertificationRequest cert = (CertificationRequest)
-                CertificationRequest.getTemplate().decode(bis);
+        // read in a cert
+        FileInputStream fis = new FileInputStream(argv[1]);
+        try (BufferedInputStream bis = new BufferedInputStream(fis)) {
+            cert = (CertificationRequest) CertificationRequest.getTemplate().decode(bis);
+        }
 
         CertificationRequestInfo info = cert.getInfo();
 
@@ -290,7 +302,7 @@ public class CertificationRequest implements ASN1Value {
         name.addLocalityName("Silicon Valley");
         name.addStateOrProvinceName("California");
         info.setSubject(name);
-        
+
         System.out.println("About to create a new cert request...");
         // create a new cert requestfrom this certReqinfo
         CertificationRequest genCert = new CertificationRequest(info, kp.getPrivate(),

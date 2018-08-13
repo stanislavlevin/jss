@@ -4,13 +4,19 @@
 
 package org.mozilla.jss.tests;
 
-import org.mozilla.jss.util.*;
-import org.mozilla.jss.crypto.*;
-import org.mozilla.jss.*;
-import org.mozilla.jss.pkcs11.*;
-import java.io.*;
-import java.awt.*;
-import java.security.cert.*;
+import java.util.Enumeration;
+
+import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.InitializationValues;
+import org.mozilla.jss.NoSuchTokenException;
+import org.mozilla.jss.NotInitializedException;
+import org.mozilla.jss.crypto.AlreadyInitializedException;
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.crypto.TokenException;
+import org.mozilla.jss.pkcs11.PK11Module;
+import org.mozilla.jss.pkcs11.PK11Token;
+import org.mozilla.jss.util.IncorrectPasswordException;
+import org.mozilla.jss.util.Password;
 
 public class SelfTest {
 
@@ -20,7 +26,6 @@ public class SelfTest {
         CryptoManager manager;
         Password pass1=null, pass2=null;
         java.security.KeyPair keyPair;
-		java.util.Enumeration items;
 		char[] passchar1 = {'f', 'o', 'o', 'b', 'a', 'r'};
 		char[] passchar2 = {'n', 'e', 't', 's', 'c', 'a', 'p', 'e'};
 
@@ -29,16 +34,15 @@ public class SelfTest {
             return;
         }
 
-        CryptoManager.InitializationValues vals = new
-            CryptoManager.InitializationValues( args[0] );
+        InitializationValues vals = new
+            InitializationValues( args[0] );
         CryptoManager.initialize(vals);
         try {
             manager = CryptoManager.getInstance();
-        } catch( CryptoManager.NotInitializedException e ) {
+        } catch( NotInitializedException e ) {
             System.out.println("CryptoManager not initialized");
             return;
         }
-        Debug.setLevel(Debug.OBNOXIOUS);
 
         try {
             tok = manager.getTokenByName("asdffda");
@@ -49,27 +53,27 @@ public class SelfTest {
 
         try {
 
-			items = manager.getModules();
+			Enumeration<PK11Module> modules = manager.getModules();
 			System.out.println("Modules:");
-			while(items.hasMoreElements()) {
+			while(modules.hasMoreElements()) {
 				System.out.println("\t"+
-					((PK11Module)items.nextElement()).getName() );
+					modules.nextElement().getName() );
 			}
 
-			items = manager.getAllTokens();
+			Enumeration<CryptoToken> tokens = manager.getAllTokens();
 			System.out.println("All Tokens:");
-			while(items.hasMoreElements()) {
+			while(tokens.hasMoreElements()) {
 				System.out.println("\t"+
-					((CryptoToken)items.nextElement()).getName() );
+					tokens.nextElement().getName() );
 			}
-			
-			items = manager.getExternalTokens();
+
+			Enumeration<CryptoToken> extTokens = manager.getExternalTokens();
 			System.out.println("External Tokens:");
-			while(items.hasMoreElements()) {
+			while(extTokens.hasMoreElements()) {
 				System.out.println("\t"+
-					((CryptoToken)items.nextElement()).getName() );
+					extTokens.nextElement().getName() );
 			}
-			
+
 
             tok = manager.getTokenByName("Internal Key Storage Token");
             System.out.println("Good, found internal DB token");
@@ -109,7 +113,7 @@ public class SelfTest {
             System.out.println("Good, successfully opened token \""+
                 tok.getName()+"\"");
 
-			pass1 = new Password( (char[]) passchar1.clone());
+			pass1 = new Password( passchar1.clone());
 			pass2 = new Password( new char[]{0} );
             tok.initPassword(pass2, pass1);
 			pass1.clear();
@@ -118,7 +122,7 @@ public class SelfTest {
             tok.logout();
 
             try {
-				pass1 = new Password( (char[]) passchar2.clone());
+				pass1 = new Password( passchar2.clone());
                 tok.login(pass1);
                 System.out.println("ERROR: Successfully logged in with wrong"+
                     " PIN");
@@ -128,7 +132,7 @@ public class SelfTest {
 				pass1.clear();
 			}
 
-			pass1 = new Password( (char[]) passchar1.clone());
+			pass1 = new Password( passchar1.clone());
             tok.login(pass1);
 			pass1.clear();
             System.out.println("Good, logged in");
@@ -141,14 +145,14 @@ public class SelfTest {
                     " not logged in");
             }
 
-			pass1 = new Password( (char[]) passchar1.clone());
-			pass2 = new Password( (char[]) passchar2.clone());
+			pass1 = new Password( passchar1.clone());
+			pass2 = new Password( passchar2.clone());
             tok.changePassword(pass1, pass2);
 			pass1.clear(); pass2.clear();
             System.out.println("Good, changed PIN");
 
             try {
-				pass1 = new Password( (char[]) passchar1.clone());
+				pass1 = new Password( passchar1.clone());
                 tok.login(pass1);
                 // Should still be logged in
                 System.out.println("Good, logging in with wrong PIN ok if "+
@@ -183,7 +187,7 @@ public class SelfTest {
                     " to log out twice in a row");
             }
             try {
-				pass1 = new Password( (char[]) passchar1.clone());
+				pass1 = new Password( passchar1.clone());
                 tok.login(pass1);
 				pass1.clear();
                 System.out.println("ERROR: logged in with wrong pw");
@@ -194,7 +198,7 @@ public class SelfTest {
             System.out.println("Test completed");
 
             tok = null;
-    
+
         } catch (IncorrectPasswordException e) {
             System.out.println("Got an incorrect PIN: "+e);
 		} catch (AlreadyInitializedException e) {

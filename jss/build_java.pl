@@ -1,4 +1,5 @@
 #use strict;
+use Cwd qw(abs_path);
 use File::Find;
 use File::Compare;
 use File::Basename;
@@ -54,7 +55,6 @@ org.mozilla.jss.SecretDecoderRing.KeyManager
 org.mozilla.jss.ssl.SSLSocket 
 org.mozilla.jss.ssl.SSLServerSocket 
 org.mozilla.jss.ssl.SocketBase 
-org.mozilla.jss.util.Debug
 org.mozilla.jss.util.Password       
 );
 
@@ -143,33 +143,43 @@ sub setup_vars {
     $javah = "$ENV{JAVA_HOME}/bin/javah";
     $javadoc = "$ENV{JAVA_HOME}/bin/javadoc";
 
-    $dist_dir = $cmdline_vars{SOURCE_PREFIX};
+    $dist_dir = abs_path($cmdline_vars{SOURCE_PREFIX});
     $jce_jar = $ENV{JCE_JAR};
 
     $class_release_dir = $cmdline_vars{SOURCE_RELEASE_PREFIX};
+    $class_dir = "$dist_dir/classes";
+    $class_jar = "$dist_dir/$cmdline_vars{XPCLASS_JAR}";
+    $class_release_dir .= "/$cmdline_vars{SOURCE_RELEASE_CLASSES_DIR}";
     if( $ENV{BUILD_OPT} ) {
-        $class_dir = "$dist_dir/classes";
-        $class_jar = "$dist_dir/$cmdline_vars{XPCLASS_JAR}";
-        $class_release_dir .= "/$cmdline_vars{SOURCE_RELEASE_CLASSES_DIR}";
         $javac_opt_flag = "-O";
-        $debug_source_file = "org/mozilla/jss/util/Debug_ship.jnot";
     } else {
-        $class_dir = "$dist_dir/classes_DBG";
-        $class_jar = "$dist_dir/$cmdline_vars{XPCLASS_DBG_JAR}";
-        $class_release_dir .= "/$cmdline_vars{SOURCE_RELEASE_CLASSES_DBG_DIR}";
         $javac_opt_flag = "-g";
-        $debug_source_file = "org/mozilla/jss/util/Debug_debug.jnot";
     }
     $jni_header_dir = "$dist_dir/private/jss/_jni";
 
-    $classpath = "-classpath /usr/share/java/apache-commons-codec.jar:/usr/share/java/commons-lang.jar:/usr/share/java/ldapjdk.jar:";
+    if( $ENV{DEBIAN_BUILD} ) {
+        $jarFiles = "/usr/share/java/slf4j-api.jar:/usr/share/java/commons-codec.jar";
+    } else {
+        $jarFiles = "/usr/share/java/slf4j/slf4j-api.jar:/usr/share/java/commons-codec.jar";
+    }
+    $classpath = "-classpath $jarFiles:/usr/share/java/commons-lang.jar";
     if( $jce_jar ) {
         $classpath .= ":$jce_jar";
     }
 
+    if( $ENV{CHECK_DEPRECATION} ) {
+        $javac_deprecation_flag = "-Xlint:deprecation";
+    } else {
+        $javac_deprecation_flag = "";
+    }
+
     # retrieve present working directory
-    $pwd = `pwd`;
-    $pwd =~ chomp $pwd;
+    $jss_dir = `pwd`;
+    $jss_dir =~ chomp $jss_dir;
+    print "JSS directory: $jss_dir\n";
+
+    $work_dir = dirname($jss_dir);
+    print "Working directory: $work_dir\n";
 
     # retrieve architecture
     $arch = `uname -m`;
@@ -179,13 +189,20 @@ sub setup_vars {
     $os = `uname`;
     $os =~ chomp $os;
 
+    $jss_objdir = "$work_dir/dist/$cmdline_vars{JSS_OBJDIR_NAME}";
+    print "jss_objdir=$jss_objdir\n";
+
     if( ( $ENV{USE_INSTALLED_NSPR} ) && ( $ENV{USE_INSTALLED_NSS} ) ) {
         print "Using the NSPR and NSS installed on the system to build JSS.\n";
+
+        $nss_lib_dir = $ENV{NSS_LIB_DIR};
+        $nss_lib_dir =~ s/^\s+|\s+$//g;  # trim spaces
+
     } else {
         # Verify existence of work area
-        if(( ! -d "$pwd/../nspr" ) ||
-           ( ! -d "$pwd/../nss" )  ||
-           ( ! -d "$pwd/../jss" )) {
+        if(( ! -d "$work_dir/nspr" ) ||
+           ( ! -d "$work_dir/nss" )  ||
+           ( ! -d "$jss_dir" )) {
             my $workarea = "\nA work area must first be prepared; for example:\n\n"
                          . "    mkdir sandbox\n"
                          . "    cd sandbox\n"
@@ -198,56 +215,41 @@ sub setup_vars {
         }
         
         # Build NSS if not already built
-        if( ! -d $dist_dir ) {
+        my $nss_latest_objdir = "$dist_dir/latest";
+
+        if( ! -e $nss_latest_objdir ) {
             print("########################\n" .
                   "# BEGIN:  Building NSS #\n" .
                   "########################\n");
-            print_do("cd ../nss;make clean nss_build_all;cd ../jss");
+            print_do("cd $work_dir/nss;make clean nss_build_all;cd $jss_dir");
             print("######################\n" .
                   "# END:  Building NSS #\n" .
                   "######################\n");
         }
-        
-        if( $os eq 'Linux' || $os eq 'Darwin' ) {
-            # set major and minor release numbers
-            $majorrel = `uname -r | cut -f1 -d.`;
-            $majorrel =~ chomp $majorrel;
-            $minorrel = `uname -r | cut -f2 -d.`;
-            $minorrel =~ chomp $minorrel;
-            
-            # read the contents of the $dist_dir into an array
-            opendir DIR, $dist_dir or die "Cannot open directory: $!";
-            my @files = readdir DIR;
-            closedir DIR;
-            
-            # process the array to obtain the NSS OBJDIR_NAME
-            my $prefix = "$os$majorrel.$minorrel";
-            foreach my $file (@files) {
-                if ((index($file, $prefix) != -1) &&
-                    (index($file, "_cc") != -1)) {
-                    $nss_objdir_name = $file;
-                    print "NSS OBJDIR_NAME=$nss_objdir_name\n";
-                    
-                    # craft JSS OBJDIR_NAME based upon value of NSS OBJDIR_NAME
-                    $jss_objdir_name = $nss_objdir_name;
-                    $jss_objdir_name =~ s/_cc//;
-                    print "JSS OBJDIR_NAME=$jss_objdir_name\n";
-                    
-                    break;
-                }
-            }
-            
-            # create a JSS OBJDIR_NAME symlink to NSS OBJDIR_NAME in $dist_dir
-            $jss_symlink = "$pwd/../dist/$jss_objdir_name";
-            if( ! -l $jss_symlink ) {
-                my $cmd = "cd ../dist;"
-                        . "ln -s $nss_objdir_name $jss_objdir_name;"
-                        . "cd ../jss";
-                print_do($cmd);
-            }
-            print "jss_symlink=$jss_symlink\n"
+
+        $nss_objdir_name = `cat $nss_latest_objdir`;
+        chomp($nss_objdir_name);
+
+        $nss_bin_dir = "$dist_dir/$nss_objdir_name/bin";
+        $nss_lib_dir = "$dist_dir/$nss_objdir_name/lib";
+
+        $jss_objdir_name = $nss_objdir_name;
+        $jss_objdir_name =~ s/_cc//;
+
+        # create a JSS OBJDIR_NAME symlink to NSS OBJDIR_NAME
+        if( ! -l $jss_objdir ) {
+            my $cmd = "cd $work_dir/dist;"
+                    . "ln -s $nss_objdir_name $jss_objdir_name;"
+                    . "cd $jss_dir";
+            print_do($cmd);
         }
     }
+
+    print "nss_bin_dir=$nss_bin_dir\n";
+    print "nss_lib_dir=$nss_lib_dir\n";
+
+    $jss_lib_dir = "$jss_objdir/lib";
+    print "jss_lib_dir=$jss_lib_dir\n";
 }
 
 sub clean {
@@ -259,27 +261,23 @@ sub clean {
 sub build {
 
     #
-    # copy the appropriate debug file
+    # generate MANIFEST.MF file in dist dir
     #
-    my $debug_target_file = "org/mozilla/jss/util/Debug.java";
-    if( compare($debug_source_file, $debug_target_file) ) {
-        copy($debug_source_file, $debug_target_file) or die "Copying file: $!";
-    }
+    my $manifest_file  = "$dist_dir/MANIFEST.MF";
+    print "Creating $manifest_file\n";
 
-    #
-    # generate manifest.mf file in lib dir
-    #
-    my $manifest_file   = "MANIFEST.MF";
     my $jss_revision   = `grep JSS_VERSION org/mozilla/jss/util/jssver.h`;
     chop($jss_revision);
     $jss_revision      = substr($jss_revision, 22, 3);
     my $build_revision = $jss_revision;
     $append = 0;
 
+    ensure_dir_exists($dist_dir);
+
     if ($append) {
-        open(MYOUTFILE, ">MANIFEST.MF");  #open for write, overwrite
+        open(MYOUTFILE, ">$manifest_file");  #open for write, overwrite
     } else {
-        open(MYOUTFILE, ">>MANIFEST.MF"); #open for write, append
+        open(MYOUTFILE, ">>$manifest_file"); #open for write, append
     }
 
     #*** Print freeform text, semicolon required ***
@@ -331,10 +329,9 @@ MyLabel
     #
     if( scalar(@source_list) > 0 ) {
         ensure_dir_exists($class_dir);
-        print_do("$javac $javac_opt_flag -sourcepath . -d $class_dir " .
+        print_do("$javac $javac_opt_flag $javac_deprecation_flag -sourcepath . -d $class_dir " .
             "$classpath " . join(" ",@source_list));
-        print_do("sh -c 'pwd && cd $class_dir && pwd && rm -f $class_jar && pwd && ls -al && ls -al ../../dist && $jar -cvmf ../../jss/$manifest_file ../$class_jar *'");
-        print_do("rm -f $manifest_file");
+        print_do("sh -c 'cd $dist_dir/classes && $jar cvmf $dist_dir/MANIFEST.MF $dist_dir/xpclass.jar *'");
         print "Exit status was " . ($?>>8) . "\n";
     }
 
@@ -374,7 +371,7 @@ sub needs_update {
 # the source file's directory is different from its package, and it
 # doesn't know about nested or inner classes.
 # source_file: the relative path to the source file ("org/mozilla/jss/...")
-# dest_dir: the directory where classes are output ("../../dist/classes_DBG")
+# dest_dir: the directory where classes are output ("../../dist/classes")
 # Returns 1 if the source file is newer than the class file, or the class file
 #   doesn't exist. Returns 0 if the class file is newer than the source file.
 sub java_source_needs_update {
@@ -428,21 +425,20 @@ sub javadoc {
     ensure_dir_exists("$dist_dir/jssdoc");
     my $targets = join(" ", @packages);
     print "$targets\n";
-    print_do("$javadoc -breakiterator -sourcepath . -d $dist_dir/jssdoc $html_header_opt $targets");
+    print_do("$javadoc -breakiterator $classpath -sourcepath . -d $dist_dir/jssdoc $html_header_opt $targets");
     print_do("cp $dist_dir/jssdoc/index.html $dist_dir/jssdoc/index.html.bak");
     print_do("cp $dist_dir/jssdoc/overview-summary.html $dist_dir/jssdoc/index.html");
 }
 
 sub test {
-    if( ( $ENV{USE_INSTALLED_NSPR} ) && ( $ENV{USE_INSTALLED_NSS} ) ) {
-        die "make test_jss is only available on upstream builds of Linux and MacOS platforms.";
-    } elsif( $os eq 'Linux' || $os eq 'Darwin' ) {
+    if( $os eq 'Linux' || $os eq 'Darwin' ) {
         # Test JSS presuming that it has already been built
+
         if(( -d $dist_dir )  &&
-           ( -l $jss_symlink )) {
-            my $cmd = "cd $pwd/org/mozilla/jss/tests;"
-                    . "perl all.pl dist $jss_symlink;"
-                    . "cd $pwd";
+           ( -d $jss_objdir || -l $jss_objdir )) {
+            my $cmd = "cd $jss_dir/org/mozilla/jss/tests;"
+                    . "perl all.pl dist \"$dist_dir\" \"$nss_bin_dir\" \"$nss_lib_dir\" \"$jss_lib_dir\";"
+                    . "cd $jss_dir";
 
             print("#######################\n" .
                   "# BEGIN:  Testing JSS #\n" .
@@ -452,7 +448,7 @@ sub test {
                   "# END:  Testing JSS #\n" .
                   "#####################\n");
         } else {
-            die "JSS builds are not available at $jss_symlink.";
+            die "JSS builds are not available at $jss_objdir.";
         }
     } else {
         die "make test_jss is only available on Linux and MacOS platforms.";

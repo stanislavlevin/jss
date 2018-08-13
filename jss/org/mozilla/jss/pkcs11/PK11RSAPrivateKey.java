@@ -1,12 +1,17 @@
 package org.mozilla.jss.pkcs11;
 
-import org.mozilla.jss.crypto.PrivateKey;
-import org.mozilla.jss.util.Assert;
 import java.math.BigInteger;
+
+import org.mozilla.jss.crypto.PrivateKey;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class PK11RSAPrivateKey
     extends PK11PrivKey implements java.security.interfaces.RSAPrivateKey
 {
+    public static Logger logger = LoggerFactory.getLogger(PK11RSAPrivateKey.class);
+
+    private static final long serialVersionUID = 1L;
 
     private PK11RSAPrivateKey() { super(null); }
 
@@ -19,9 +24,11 @@ class PK11RSAPrivateKey
     }
 
     public BigInteger getModulus() {
-        // !!!
-        return null;
+        logger.debug("PK11RSAPrivateKey: getModulus()");
+        return new BigInteger(1, getModulusByteArray());
     }
+
+    native byte[] getModulusByteArray();
 
     public BigInteger getPrivateExponent() {
         // !!!

@@ -4,16 +4,31 @@
 
 package org.mozilla.jss.tests;
 
-import java.io.*;
-import java.net.*;
-import javax.net.ssl.*;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.security.KeyStore;
-import java.util.Vector;
-import org.mozilla.jss.*;
 import java.security.Provider;
 import java.security.Security;
 //note: SunPKCS11 requires JDK 1.5 or higher.
 //SunPKCS11 import sun.security.pkcs11.SunPKCS11;
+import java.util.Vector;
+
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLServerSocketFactory;
+
+import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.InitializationValues;
 
 /**
  * JSSE SSLServer class that acts as SSL Server
@@ -30,17 +45,17 @@ public class JSSE_SSLServer {
     private String configDir      = "";
     private boolean bClientAuth     = false;
     private boolean       bVerbose        = false;
-    private Vector supportedCiphers = new Vector();
+    private Vector<String> supportedCiphers = new Vector<>();
     private CryptoManager manager;
-    private String provider = "SunJCE";  
-    
-    
+    private String provider = "SunJCE";
+
+
     /**
      * Constructs a JSSE_SSLServer.
      */
     public JSSE_SSLServer() throws IOException {
     }
-    
+
        /**
      * Set the provider to use.
      * @param p
@@ -48,7 +63,7 @@ public class JSSE_SSLServer {
     public void setProvider(String p) {
         provider = p;
     }
-    
+
     /**
      * Get the configured provider.
      * @return String provider
@@ -63,7 +78,7 @@ public class JSSE_SSLServer {
     public void setKeystore(String fconfigDir) {
         configDir = fconfigDir;
     }
-    
+
     /**
      * Get the location of keystore file.
      * @return String configDir
@@ -82,7 +97,7 @@ public class JSSE_SSLServer {
             (new JSSE_SSLServer()).startSSLServer(args);
         } catch (Exception e) {}
     }
-    
+
     /**
      * Start SSLServer and accept connections.
      * @param args
@@ -134,8 +149,8 @@ public class JSSE_SSLServer {
                 }
 
                 System.out.println("Initializing " + args[5]);
-                CryptoManager.InitializationValues vals = new
-                    CryptoManager.InitializationValues(configDir);
+                InitializationValues vals = new
+                    InitializationValues(configDir);
                 vals.removeSunProvider = false;
                 CryptoManager.initialize(vals);
                 manager = CryptoManager.getInstance();
@@ -189,7 +204,7 @@ public class JSSE_SSLServer {
                 ss.setEnabledCipherSuites(ss.getSupportedCipherSuites());
 
                 System.out.println("Create JSSE SSLServer");
-                ((SSLServerSocket)ss).setNeedClientAuth(bClientAuth);
+                ss.setNeedClientAuth(bClientAuth);
                 JSSE_SSLServer JSSEServ = new JSSE_SSLServer();
                 // accept an SSL connection
                 int socketCntr = 0;
@@ -356,7 +371,10 @@ public class JSSE_SSLServer {
             kmf = KeyManagerFactory.getInstance(certificate);
             ks = KeyStore.getInstance("PKCS12");
 
-            ks.load(new FileInputStream(getKeystore()), passphrase);
+            try (FileInputStream in = new FileInputStream(getKeystore())) {
+                ks.load(in, passphrase);
+            }
+
             kmf.init(ks, passphrase);
             ctx.init(kmf.getKeyManagers(), null, null);
 

@@ -7,7 +7,6 @@ import org.mozilla.jss.asn1.*;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
-import org.mozilla.jss.util.Assert;
 import java.security.PublicKey;
 import java.security.NoSuchAlgorithmException;
 import org.mozilla.jss.crypto.PrivateKey;
@@ -21,6 +20,7 @@ import org.mozilla.jss.pkcs11.PK11PubKey;
 public class SubjectPublicKeyInfo extends java.security.spec.X509EncodedKeySpec
     implements ASN1Value, java.security.PublicKey {
 
+    private static final long serialVersionUID = 1L;
     private AlgorithmIdentifier algorithm;
     private BIT_STRING subjectPublicKey;
 

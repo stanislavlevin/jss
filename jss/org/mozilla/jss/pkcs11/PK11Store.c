@@ -109,26 +109,27 @@ finish:
 }
 
 /**********************************************************************
- * PK11Store.putKeysInVector
+ * PK11Store.loadPrivateKeys
  */
 JNIEXPORT void JNICALL
-Java_org_mozilla_jss_pkcs11_PK11Store_putKeysInVector
-    (JNIEnv *env, jobject this, jobject keyVector)
+Java_org_mozilla_jss_pkcs11_PK11Store_loadPrivateKeys
+    (JNIEnv *env, jobject this, jobject collection)
 {
     PK11SlotInfo *slot;
-    SECKEYPrivateKeyList *keyList = NULL;
-    SECKEYPrivateKey* keyCopy = NULL;
-    jobject object = NULL;
-    jclass vectorClass;
-    jmethodID addElement;
+    SECKEYPrivateKeyList *list = NULL;
     SECKEYPrivateKeyListNode *node = NULL;
+    SECKEYPrivateKey* key = NULL;
+    jobject privateKey = NULL;
+    jclass collectionClass;
+    jmethodID collectionAdd;
 
-    PR_ASSERT(env!=NULL && this!=NULL && keyVector!=NULL);
+    PR_ASSERT(env!=NULL && this!=NULL && collection!=NULL);
 
-    if( JSS_PK11_getStoreSlotPtr(env, this, &slot) != PR_SUCCESS) {
+    if (JSS_PK11_getStoreSlotPtr(env, this, &slot) != PR_SUCCESS) {
         ASSERT_OUTOFMEM(env);
         goto finish;
     }
+
     PR_ASSERT(slot!=NULL);
 
     /*
@@ -140,56 +141,137 @@ Java_org_mozilla_jss_pkcs11_PK11Store_putKeysInVector
      */
     PK11_Authenticate(slot, PR_TRUE /*load certs*/, NULL /*wincx*/);
 
-    /*
-     * Get the list of keys on this token
-     */
-    keyList = PK11_ListPrivateKeysInSlot(slot);
-    if( keyList == NULL ) {
+    // get the list of keys on this token
+    list = PK11_ListPrivateKeysInSlot(slot);
+
+    if (list == NULL) {
         JSS_throwMsg(env, TOKEN_EXCEPTION, "PK11_ListPrivateKeysInSlot "
             "returned an error");
         goto finish;
     }
 
-    /**************************************************
-     * Get JNI ids
-     **************************************************/
-    vectorClass = (*env)->GetObjectClass(env, keyVector);
-    if(vectorClass == NULL) {
-        ASSERT_OUTOFMEM(env);
-        goto finish;
-    }
-    addElement = (*env)->GetMethodID(env,
-                                     vectorClass,
-                                     VECTOR_ADD_ELEMENT_NAME,
-                                     VECTOR_ADD_ELEMENT_SIG);
-    if(addElement == NULL) {
+    // get Collection class
+    collectionClass = (*env)->FindClass(env, COLLECTION_CLASS_NAME);
+
+    if (collectionClass == NULL) {
         ASSERT_OUTOFMEM(env);
         goto finish;
     }
 
-    for(    node = PRIVKEY_LIST_HEAD(keyList);
-            !PRIVKEY_LIST_END(node, keyList);
+    // get Collection.add() method
+    collectionAdd = (*env)->GetMethodID(env,
+                                     collectionClass,
+                                     COLLECTION_ADD_NAME,
+                                     COLLECTION_ADD_SIG);
+
+    if (collectionAdd == NULL) {
+        ASSERT_OUTOFMEM(env);
+        goto finish;
+    }
+
+    for(    node = PRIVKEY_LIST_HEAD(list);
+            !PRIVKEY_LIST_END(node, list);
             node = PRIVKEY_LIST_NEXT(node) )
     {
-        /***************************************************
-        * Wrap the object
-        ***************************************************/
-        keyCopy = SECKEY_CopyPrivateKey(node->key);
-        object = JSS_PK11_wrapPrivKey(env, &keyCopy);
-        if(object == NULL) {
-            PR_ASSERT( (*env)->ExceptionOccurred(env) );
+        // wrap private key
+        key = SECKEY_CopyPrivateKey(node->key);
+        privateKey = JSS_PK11_wrapPrivKey(env, &key);
+        if (privateKey == NULL) {
+            PR_ASSERT((*env)->ExceptionOccurred(env));
             goto finish;
         }
 
-        /***************************************************
-        * Insert the key into the vector
-        ***************************************************/
-        (*env)->CallVoidMethod(env, keyVector, addElement, object);
+        // add private key into collection
+        (*env)->CallBooleanMethod(env, collection, collectionAdd, privateKey);
     }
 
 finish:
-    if( keyList != NULL ) {
-        SECKEY_DestroyPrivateKeyList(keyList);
+    if (list != NULL) {
+        SECKEY_DestroyPrivateKeyList(list);
+    }
+    return;
+}
+
+/**********************************************************************
+ * PK11Store.loadPublicKeys
+ */
+JNIEXPORT void JNICALL
+Java_org_mozilla_jss_pkcs11_PK11Store_loadPublicKeys
+    (JNIEnv *env, jobject this, jobject collection)
+{
+    PK11SlotInfo *slot;
+    SECKEYPublicKeyList *list = NULL;
+    SECKEYPublicKeyListNode *node = NULL;
+    SECKEYPublicKey* key = NULL;
+    jobject publicKey = NULL;
+    jclass collectionClass;
+    jmethodID collectionAdd;
+
+    PR_ASSERT(env!=NULL && this!=NULL && collection!=NULL);
+
+    if (JSS_PK11_getStoreSlotPtr(env, this, &slot) != PR_SUCCESS) {
+        ASSERT_OUTOFMEM(env);
+        goto finish;
+    }
+
+    PR_ASSERT(slot!=NULL);
+
+    /*
+     * Most, if not all, tokens have to be logged in before they allow
+     * access to their public keys, so try to log in here.  If we're already
+     * logged in, this is a no-op.
+     * If the login fails, go ahead and try to get the keys anyway, in case
+     * this is an exceptionally promiscuous token.
+     */
+    PK11_Authenticate(slot, PR_TRUE /*load certs*/, NULL /*wincx*/);
+
+    // get the list of keys on this token
+    list = PK11_ListPublicKeysInSlot(slot, NULL /*nickname*/);
+
+    if (list == NULL) {
+        JSS_throwMsg(env, TOKEN_EXCEPTION, "PK11_ListPublicKeysInSlot "
+            "returned an error");
+        goto finish;
+    }
+
+    // get Collection class
+    collectionClass = (*env)->FindClass(env, COLLECTION_CLASS_NAME);
+
+    if (collectionClass == NULL) {
+        ASSERT_OUTOFMEM(env);
+        goto finish;
+    }
+
+    // get Collection.add() method
+    collectionAdd = (*env)->GetMethodID(env,
+                                     collectionClass,
+                                     COLLECTION_ADD_NAME,
+                                     COLLECTION_ADD_SIG);
+
+    if (collectionAdd == NULL) {
+        ASSERT_OUTOFMEM(env);
+        goto finish;
+    }
+
+    for(    node = PUBKEY_LIST_HEAD(list);
+            !PUBKEY_LIST_END(node, list);
+            node = PUBKEY_LIST_NEXT(node) )
+    {
+        // wrap public key
+        key = SECKEY_CopyPublicKey(node->key);
+        publicKey = JSS_PK11_wrapPubKey(env, &key);
+        if (publicKey == NULL) {
+            PR_ASSERT((*env)->ExceptionOccurred(env));
+            goto finish;
+        }
+
+        // add public key into collection
+        (*env)->CallBooleanMethod(env, collection, collectionAdd, publicKey);
+    }
+
+finish:
+    if (list != NULL) {
+        SECKEY_DestroyPublicKeyList(list);
     }
     return;
 }
@@ -308,55 +390,85 @@ JSS_PK11_getStoreSlotPtr(JNIEnv *env, jobject store, PK11SlotInfo **slot)
  */
 JNIEXPORT void JNICALL
 Java_org_mozilla_jss_pkcs11_PK11Store_deletePrivateKey
-    (JNIEnv *env, jobject this, jobject key)
+    (JNIEnv *env, jobject this, jobject privateKeyObj)
 {
     PK11SlotInfo *slot;
-    SECKEYPrivateKey *privk;
+    SECKEYPrivateKey *privateKey;
 
     PR_ASSERT(env!=NULL && this!=NULL);
-    if(key == NULL) {
+
+    if (privateKeyObj == NULL) {
         JSS_throw(env, NO_SUCH_ITEM_ON_TOKEN_EXCEPTION);
         goto finish;
     }
 
-    /**************************************************
-     * Get the C structures
-     **************************************************/
-    if( JSS_PK11_getStoreSlotPtr(env, this, &slot) != PR_SUCCESS) {
-        PR_ASSERT( (*env)->ExceptionOccurred(env) != NULL);
+    if (JSS_PK11_getStoreSlotPtr(env, this, &slot) != PR_SUCCESS) {
+        PR_ASSERT((*env)->ExceptionOccurred(env) != NULL);
         goto finish;
     }
 
-    if( JSS_PK11_getPrivKeyPtr(env, key, &privk) != PR_SUCCESS) {
-        PR_ASSERT( (*env)->ExceptionOccurred(env) != NULL);
+    if (JSS_PK11_getPrivKeyPtr(env, privateKeyObj, &privateKey) != PR_SUCCESS) {
+        PR_ASSERT((*env)->ExceptionOccurred(env) != NULL);
         goto finish;
     }
-
-    /***************************************************
-     * Validate structures
-     ***************************************************/
 
     /* A private key may be temporary, but you can't use this function
      * to delete it.  Instead, just let it be garbage collected */
-    if( privk->pkcs11IsTemp ) {
+    if (privateKey->pkcs11IsTemp) {
         PR_ASSERT(PR_FALSE);
         JSS_throwMsg(env, TOKEN_EXCEPTION,
             "Private Key is not a permanent PKCS #11 object");
         goto finish;
     }
 
-    if( slot != privk->pkcs11Slot) {
+    if (slot != privateKey->pkcs11Slot) {
         JSS_throw(env, NO_SUCH_ITEM_ON_TOKEN_EXCEPTION);
         goto finish;
     }
 
-    /***************************************************
-     * Perform the destruction
-     ***************************************************/
-    if( PK11_DestroyTokenObject(privk->pkcs11Slot, privk->pkcs11ID)
-        != SECSuccess)
-    {
-        JSS_throwMsg(env, TOKEN_EXCEPTION, "Unable to actually destroy object");
+    if (PK11_DestroyTokenObject(privateKey->pkcs11Slot, privateKey->pkcs11ID) != SECSuccess) {
+        JSS_throwMsg(env, TOKEN_EXCEPTION, "Unable to remove private key");
+        goto finish;
+    }
+
+finish:
+    return;
+}
+
+/**********************************************************************
+ * PK11Store.deletePublicKey
+ */
+JNIEXPORT void JNICALL
+Java_org_mozilla_jss_pkcs11_PK11Store_deletePublicKey
+    (JNIEnv *env, jobject this, jobject publicKeyObj)
+{
+    PK11SlotInfo *slot;
+    SECKEYPublicKey *publicKey;
+
+    PR_ASSERT(env != NULL && this != NULL);
+
+    if (publicKeyObj == NULL) {
+        JSS_throw(env, NO_SUCH_ITEM_ON_TOKEN_EXCEPTION);
+        goto finish;
+    }
+
+    if (JSS_PK11_getStoreSlotPtr(env, this, &slot) != PR_SUCCESS) {
+        PR_ASSERT((*env)->ExceptionOccurred(env) != NULL);
+        goto finish;
+    }
+
+    if (JSS_PK11_getPubKeyPtr(env, publicKeyObj, &publicKey) != PR_SUCCESS) {
+        PR_ASSERT((*env)->ExceptionOccurred(env) != NULL);
+        goto finish;
+    }
+
+    if (slot != publicKey->pkcs11Slot) {
+        JSS_throw(env, NO_SUCH_ITEM_ON_TOKEN_EXCEPTION);
+        goto finish;
+    }
+
+    if (PK11_DestroyTokenObject(publicKey->pkcs11Slot, publicKey->pkcs11ID) != SECSuccess) {
+        JSS_throwMsg(env, TOKEN_EXCEPTION, "Unable to remove public key");
         goto finish;
     }
 

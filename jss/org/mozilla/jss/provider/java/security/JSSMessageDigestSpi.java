@@ -5,15 +5,20 @@
 package org.mozilla.jss.provider.java.security;
 
 import java.security.DigestException;
-import org.mozilla.jss.crypto.*;
-import org.mozilla.jss.CryptoManager;
 import java.security.MessageDigestSpi;
+
+import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.NotInitializedException;
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.crypto.DigestAlgorithm;
+import org.mozilla.jss.crypto.JSSMessageDigest;
+import org.mozilla.jss.crypto.TokenException;
+import org.mozilla.jss.crypto.TokenRuntimeException;
+import org.mozilla.jss.crypto.TokenSupplierManager;
 
 public abstract class JSSMessageDigestSpi extends MessageDigestSpi {
 
     private JSSMessageDigest digest;
-
-    private JSSMessageDigestSpi() { }
 
     protected JSSMessageDigestSpi(DigestAlgorithm alg) {
         super();
@@ -37,7 +42,7 @@ public abstract class JSSMessageDigestSpi extends MessageDigestSpi {
             throw new TokenRuntimeException(e.getMessage());
         } catch(DigestException e1) {
             throw new TokenRuntimeException(e1.getMessage());
-        } catch(CryptoManager.NotInitializedException e2) {
+        } catch(NotInitializedException e2) {
             throw new TokenRuntimeException(e2.getMessage());
         }
     }

@@ -3,11 +3,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss.asn1;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
-
-import org.mozilla.jss.asn1.InvalidBERException;
-import org.mozilla.jss.util.Assert;
 
 public class ASN1Util {
 
@@ -24,8 +25,7 @@ public class ASN1Util {
         return bos.toByteArray();
 
       } catch( IOException e ) {
-        Assert.notReached("Encoding to byte array gave IOException");
-        return null;
+        throw new RuntimeException("Unable to encode byte array: " + e.getMessage(), e);
       }
     }
 
@@ -38,11 +38,10 @@ public class ASN1Util {
         return template.decode(bis);
 
       } catch( IOException e ) {
-        Assert.notReached("Decoding from byte array gave IOException");
-        return null;
+        throw (InvalidBERException) new InvalidBERException("Unable to decode byte array: " + e.getMessage()).initCause(e);
       }
     }
-    
+
     public static ASN1Value decode(Tag implicitTag, ASN1Template template,
                             byte[] encoded)
         throws InvalidBERException
@@ -53,8 +52,7 @@ public class ASN1Util {
         return template.decode(implicitTag, bis);
 
       } catch( IOException e ) {
-        Assert.notReached("Decoding from byte array gave IOException");
-        return null;
+        throw (InvalidBERException) new InvalidBERException("Unable to decode byte array: " + e.getMessage()).initCause(e);
       }
     }
 
@@ -90,6 +88,7 @@ public class ASN1Util {
      *
      * @param X509PubKeyBytes byte array of an X509PubKey
      * @param withHeader tells if the return byes should inclulde the tag and size header or not
+     * @return ECC curve byte array.
      */
     public static byte[] getECCurveBytesByX509PublicKeyBytes(byte[] X509PubKeyBytes,
         boolean withHeader)
@@ -110,7 +109,7 @@ public class ASN1Util {
 
         int curveBeginIndex = 0;
         for (int idx = 0; idx<= X509PubKeyBytes.length; idx++) {
-            byte[] tmp = 
+            byte[] tmp =
                 Arrays.copyOfRange(X509PubKeyBytes, idx, idx+EC_PubOIDBytes.length);
             if (Arrays.equals(tmp, EC_PubOIDBytes)) {
                 curveBeginIndex = idx+ EC_PubOIDBytes.length;
@@ -118,7 +117,7 @@ public class ASN1Util {
             }
         }
 
-        int curveByteArraySize = (int) X509PubKeyBytes[curveBeginIndex+ 1];
+        int curveByteArraySize = X509PubKeyBytes[curveBeginIndex+ 1];
 
         if (withHeader) {
             /* actual curve with tag and size */
@@ -126,7 +125,7 @@ public class ASN1Util {
             return curve;
         } else {
             /* actual curve without tag and size */
-            byte curve[] = 
+            byte curve[] =
                 Arrays.copyOfRange(X509PubKeyBytes, curveBeginIndex + 2,
                     curveBeginIndex + 2 + curveByteArraySize);
             return curve;
@@ -138,6 +137,8 @@ public class ASN1Util {
      *     from OID byte array
      * the OID byte array is expected to be without the OID Tag (6) and size
      *    (together 2 bytes)
+     * @param oidBA OID byte array.
+     * @return OID description.
      */
     public static String
     getOIDdescription(byte[] oidBA) {

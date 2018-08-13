@@ -7,6 +7,9 @@ package org.mozilla.jss.util;
 import java.io.CharConversionException;
 import java.io.Console;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Stores a password.  <code>clear</code> should be
  * called when the password is no longer needed so that the sensitive
@@ -18,6 +21,9 @@ import java.io.Console;
 public class Password implements PasswordCallback, Cloneable,
         java.io.Serializable
     {
+    private static final long serialVersionUID = 1L;
+
+    public static Logger logger = LoggerFactory.getLogger(Password.class);
 
     /**
      * Don't use this if you aren't Password.
@@ -163,9 +169,8 @@ public class Password implements PasswordCallback, Cloneable,
      * before this point anyway.
      */
     protected void finalize() throws Throwable {
-        if(Debug.DEBUG && !cleared) {
-            System.err.println("ERROR: Password was garbage collected before"+
-                " it was cleared.");
+        if(!cleared) {
+            logger.warn("Password was garbage collected before it was cleared.");
         }
         clear();
     }
@@ -189,9 +194,9 @@ public class Password implements PasswordCallback, Cloneable,
 		try {
 			byteArray = UTF8Converter.UnicodeToUTF8NullTerm(charArray);
 		} catch(CharConversionException e) {
-			Assert.notReached("Password could not be converted from"
-				+" Unicode");
-			byteArray = new byte[] {0};
+			throw new RuntimeException("Password could not be converted from"
+				+" Unicode: " + e.getMessage(), e);
+			// byteArray = new byte[] {0};
 		} finally {
 			wipeChars(charArray);
 		}

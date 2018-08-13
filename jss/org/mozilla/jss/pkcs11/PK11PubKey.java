@@ -4,13 +4,16 @@
 
 package org.mozilla.jss.pkcs11;
 
-import org.mozilla.jss.crypto.Algorithm;
-import org.mozilla.jss.util.*;
-import org.mozilla.jss.crypto.PrivateKey;
 import org.mozilla.jss.crypto.InvalidKeyFormatException;
+import org.mozilla.jss.crypto.PrivateKey;
+import org.mozilla.jss.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PK11PubKey extends org.mozilla.jss.pkcs11.PK11Key
 	implements java.security.PublicKey {
+
+    private static final long serialVersionUID = 1L;
 
     protected PK11PubKey(byte[] pointer) {
         Assert._assert(pointer!=null);
@@ -95,14 +98,11 @@ public class PK11PubKey extends org.mozilla.jss.pkcs11.PK11Key
 
 class PublicKeyProxy extends KeyProxy {
 
+    public static Logger logger = LoggerFactory.getLogger(PublicKeyProxy.class);
+
     public PublicKeyProxy(byte[] pointer) {
         super(pointer);
     }
 
     protected native void releaseNativeResources();
-
-    protected void finalize() throws Throwable {
-        super.finalize();
-		Debug.trace(Debug.OBNOXIOUS, "Releasing a PublicKeyProxy");
-    }
 }

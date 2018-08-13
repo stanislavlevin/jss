@@ -38,11 +38,11 @@ PR_BEGIN_EXTERN_C
 #define CIPHER_CONTEXT_PROXY_CONSTRUCTOR_SIG "([B)V"
 
 /*
- * Debug
+ * Collection
  */
-#define DEBUG_CLASS_NAME "org/mozilla/jss/util/Debug"
-#define DEBUG_TRACE_NAME "trace"
-#define DEBUG_TRACE_SIG "(ILjava/lang/String;)V"
+#define COLLECTION_CLASS_NAME "java/util/Collection"
+#define COLLECTION_ADD_NAME "add"
+#define COLLECTION_ADD_SIG "(Ljava/lang/Object;)Z"
 
 /*
  * InetAddress
@@ -362,6 +362,14 @@ PR_BEGIN_EXTERN_C
  * X509Certificate
  */
 #define X509_CERT_CLASS "org/mozilla/jss/crypto/X509Certificate"
+
+
+/*
+ * SSLVersionRange
+ */
+#define SSL_VERSION_RANGE_CLASS_NAME "org/mozilla/jss/ssl/SSLVersionRange"
+#define SSL_VERSION_RANGE_CONSTRUCTOR_NAME "<init>"
+#define SSL_VERSION_RANGE_CONSTRUCTOR_SIG "(II)V"
 
 PR_END_EXTERN_C
 

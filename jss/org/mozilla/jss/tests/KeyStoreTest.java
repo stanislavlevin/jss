@@ -4,19 +4,26 @@
 
 package org.mozilla.jss.tests;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
+import java.security.Key;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.util.Enumeration;
+
+import javax.crypto.SecretKey;
+
 import org.mozilla.jss.CryptoManager;
 import org.mozilla.jss.crypto.CryptoToken;
-import org.mozilla.jss.crypto.KeyGenerator;
 import org.mozilla.jss.crypto.KeyGenAlgorithm;
+import org.mozilla.jss.crypto.KeyGenerator;
 import org.mozilla.jss.crypto.SecretKeyFacade;
 import org.mozilla.jss.pkcs11.PK11Token;
 import org.mozilla.jss.util.ConsolePasswordCallback;
-import java.security.*;
-import java.security.cert.CertificateFactory;
-import java.util.Enumeration;
-import java.security.cert.Certificate;
-import java.io.*;
-import javax.crypto.SecretKey;
 
 public class KeyStoreTest {
 
@@ -76,7 +83,7 @@ public class KeyStoreTest {
             if( args.length < 1 ) {
                 printUsage();
                 System.exit(1);
-            }   
+            }
             getCertByDER(ks, args[0]);
         } else if( op.equalsIgnoreCase("getKey") ) {
             if( args.length != 1 ) {
@@ -120,11 +127,11 @@ public class KeyStoreTest {
     }
 
     public static void dumpAliases(KeyStore ks) throws Throwable {
-        Enumeration aliases = ks.aliases();
+        Enumeration<String> aliases = ks.aliases();
 
         System.out.println("Aliases:");
         while( aliases.hasMoreElements() ) {
-            String alias = (String) aliases.nextElement();
+            String alias = aliases.nextElement();
             System.out.println( "\"" + alias + "\"");
         }
         System.out.println();
@@ -133,14 +140,16 @@ public class KeyStoreTest {
     public static void getCertByDER(KeyStore ks, String derCertFilename)
             throws Throwable {
 
-        FileInputStream fis = new FileInputStream(derCertFilename);
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         byte[] buf = new byte[1024];
         int numRead;
 
-        while( (numRead = fis.read(buf)) != -1 ) {
-            bos.write(buf, 0, numRead);
+        try (FileInputStream fis = new FileInputStream(derCertFilename)) {
+            while ((numRead = fis.read(buf)) != -1) {
+                bos.write(buf, 0, numRead);
+            }
         }
+
         ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
 
         CertificateFactory fact = CertificateFactory.getInstance("X.509");
@@ -169,7 +178,7 @@ public class KeyStoreTest {
             System.out.println("Found " + clazz + " for alias \"" +
                 alias + "\"");
         }
-    }           
+    }
 
     public static void isTrustedCert(KeyStore ks, String alias)
             throws Throwable {

@@ -9,14 +9,10 @@ import org.mozilla.jss.asn1.*;
 import org.mozilla.jss.util.Assert;
 import org.mozilla.jss.pkix.primitive.*;
 import org.mozilla.jss.crypto.*;
-import java.util.Vector;
-import java.math.BigInteger;
-import java.io.ByteArrayInputStream;
 import java.security.InvalidKeyException;
 import java.security.SignatureException;
 import java.security.NoSuchAlgorithmException;
 import java.security.MessageDigest;
-import org.mozilla.jss.crypto.*;
 import org.mozilla.jss.*;
 import java.security.PublicKey;
 
@@ -266,7 +262,7 @@ public class SignerInfo implements ASN1Value {
                         SignatureAlgorithm signingAlg,
                         PrivateKey signingKey )
         throws InvalidKeyException, NoSuchAlgorithmException,
-        CryptoManager.NotInitializedException, SignatureException,
+        NotInitializedException, SignatureException,
         TokenException
     {
         version = VERSION;
@@ -403,7 +399,7 @@ public class SignerInfo implements ASN1Value {
      *      the issuer name and serial number can be found.
      */
     public void verify(byte[] messageDigest, OBJECT_IDENTIFIER contentType)
-        throws CryptoManager.NotInitializedException, NoSuchAlgorithmException,
+        throws NotInitializedException, NoSuchAlgorithmException,
         InvalidKeyException, TokenException, SignatureException,
         ObjectNotFoundException
     {
@@ -448,7 +444,7 @@ public class SignerInfo implements ASN1Value {
      */
     public void verify(byte[] messageDigest, OBJECT_IDENTIFIER contentType,
         PublicKey pubkey)
-        throws CryptoManager.NotInitializedException, NoSuchAlgorithmException,
+        throws NotInitializedException, NoSuchAlgorithmException,
         InvalidKeyException, TokenException, SignatureException
     {
 
@@ -468,7 +464,7 @@ public class SignerInfo implements ASN1Value {
     private void verifyWithoutAuthenticatedAttributes
         (byte[] messageDigest, OBJECT_IDENTIFIER contentType,
         PublicKey pubkey)
-        throws CryptoManager.NotInitializedException, NoSuchAlgorithmException,
+        throws NotInitializedException, NoSuchAlgorithmException,
         InvalidKeyException, TokenException, SignatureException
     {
         if( ! contentType.equals(ContentInfo.DATA) ) {
@@ -528,7 +524,7 @@ public class SignerInfo implements ASN1Value {
     private void verifyWithAuthenticatedAttributes
         (byte[] messageDigest, OBJECT_IDENTIFIER contentType,
         PublicKey pubkey)
-        throws CryptoManager.NotInitializedException, NoSuchAlgorithmException,
+        throws NotInitializedException, NoSuchAlgorithmException,
         InvalidKeyException, TokenException, SignatureException
     {
 

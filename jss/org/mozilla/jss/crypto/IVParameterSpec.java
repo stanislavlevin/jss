@@ -13,14 +13,12 @@ public class IVParameterSpec implements AlgorithmParameterSpec {
 
     private byte[] iv;
 
-    private IVParameterSpec() { }
-
     public IVParameterSpec(byte[] iv) {
         this.iv = iv;
     }
 
     /**
-     * Returns a reference to an internal copy of the initialization vector.
+     * @return Reference to an internal copy of the initialization vector.
      */
     public byte[] getIV() {
         return iv;

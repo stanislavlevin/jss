@@ -4,8 +4,9 @@
 
 package org.mozilla.jss.crypto;
 
-import org.mozilla.jss.asn1.OBJECT_IDENTIFIER;
 import java.security.NoSuchAlgorithmException;
+
+import org.mozilla.jss.asn1.OBJECT_IDENTIFIER;
 
 /**
  * Represents a cryptographic algorithm.
@@ -13,8 +14,6 @@ import java.security.NoSuchAlgorithmException;
  * @see SignatureAlgorithm
  */
 public class Algorithm {
-
-    private Algorithm() { }
 
     /**
      * @param oidIndex Index of the oid that this algorithm represents.
@@ -36,7 +35,7 @@ public class Algorithm {
     }
 
     protected Algorithm(int oidIndex, String name, OBJECT_IDENTIFIER oid,
-                        Class paramClass)
+                        Class<?> paramClass)
     {
         this(oidIndex, name, oid);
         if( paramClass == null ) {
@@ -48,7 +47,7 @@ public class Algorithm {
     }
 
     protected Algorithm(int oidIndex, String name, OBJECT_IDENTIFIER oid,
-                        Class []paramClasses)
+                        Class<?> []paramClasses)
     {
         this(oidIndex, name, oid);
         if( paramClasses != null ) {
@@ -64,7 +63,7 @@ public class Algorithm {
     }
 
     /**
-     * Returns the object identifier for this algorithm.
+     * @return The object identifier for this algorithm.
      * @exception NoSuchAlgorithmException If no OID is registered for this
      *      algorithm.
      */
@@ -82,9 +81,10 @@ public class Algorithm {
      * If the algorithm can accept more than one type of parameter,
      *   this method returns only one of them. It is better to call
      *   <tt>getParameterClasses()</tt>.
+     * @return Parameter type.
      * @deprecated Call <tt>getParameterClasses()</tt> instead.
      */
-    public Class getParameterClass() {
+    public Class<?> getParameterClass() {
         if( parameterClasses.length == 0) {
             return null;
         } else {
@@ -95,17 +95,20 @@ public class Algorithm {
     /**
      * The types of parameter that this algorithm expects.  Returns
      *   <code>null</code> if this algorithm does not take any parameters.
+     * @return Parameter types.
      */
-    public Class[] getParameterClasses() {
-        return (Class[]) parameterClasses.clone();
+    public Class<?>[] getParameterClasses() {
+        return parameterClasses.clone();
     }
 
     /**
-     * Returns <tt>true</tt> if the given Object can be used as a parameter
+     * Validates if the given Object can be used as a parameter
      * for this algorithm.
      * <p>If <tt>null</tt> is passed in, this method will return <tt>true</tt>
      *      if this algorithm takes no parameters, and <tt>false</tt>
      *      if this algorithm does take parameters.
+     * @param o Object.
+     * @return Returns <tt>true</tt> if the given Object can be used as a parameter.
      */
     public boolean isValidParameterObject(Object o) {
         if( o == null ) {
@@ -114,7 +117,7 @@ public class Algorithm {
         if( parameterClasses.length == 0 ){
             return false;
         }
-        Class c = o.getClass();
+        Class<?> c = o.getClass();
         for( int i = 0; i < parameterClasses.length; ++i) {
             if( c.equals( parameterClasses[i] ) ) {
                 return true;
@@ -129,14 +132,14 @@ public class Algorithm {
     protected int oidIndex;
     String name;
     protected OBJECT_IDENTIFIER oid;
-    private Class[] parameterClasses=new Class[0];
+    private Class<?>[] parameterClasses=new Class[0];
 
     //////////////////////////////////////////////////////////////
     // Algorithm OIDs
     //////////////////////////////////////////////////////////////
-    static final OBJECT_IDENTIFIER ANSI_X9_ALGORITHM = 
+    static final OBJECT_IDENTIFIER ANSI_X9_ALGORITHM =
         new OBJECT_IDENTIFIER( new long[] { 1, 2, 840, 10040, 4 } );
-    static final OBJECT_IDENTIFIER ANSI_X962_OID = 
+    static final OBJECT_IDENTIFIER ANSI_X962_OID =
         new OBJECT_IDENTIFIER( new long[] { 1, 2, 840, 10045 } );
 
     // Algorithm indices.  These must be kept in sync with the

@@ -14,6 +14,7 @@ SRC_DIR=`dirname "$SCRIPT_PATH"`
 WORK_DIR="$HOME/build/$NAME"
 
 SOURCE_TAG=
+SPEC_TEMPLATE=
 
 WITH_TIMESTAMP=
 WITH_COMMIT_ID=
@@ -28,6 +29,7 @@ usage() {
     echo "Options:"
     echo "    --work-dir=<path>      Working directory (default: $WORK_DIR)."
     echo "    --source-tag=<tag>     Generate RPM sources from a source tag."
+    echo "    --spec=<file>          Use the specified RPM spec."
     echo "    --with-timestamp       Append timestamp to release number."
     echo "    --with-commit-id       Append commit ID to release number."
     echo "    --dist=<name>          Distribution name (e.g. fc28)."
@@ -39,12 +41,12 @@ usage() {
     echo "    src    Generate RPM sources."
     echo "    spec   Generate RPM spec."
     echo "    srpm   Build SRPM package."
-    echo "    rpm    Build RPM packages."
+    echo "    rpm    Build RPM packages (default)."
 }
 
 generate_rpm_sources() {
 
-    TARBALL="$NAME-$VERSION.tar.gz"
+    TARBALL="$NAME-$VERSION${_PHASE}.tar.gz"
 
     if [ "$SOURCE_TAG" != "" ] ; then
 
@@ -55,7 +57,7 @@ generate_rpm_sources() {
         git -C "$SRC_DIR" \
             archive \
             --format=tar.gz \
-            --prefix $NAME-$VERSION/ \
+            --prefix $NAME-$VERSION${_PHASE}/ \
             -o "$WORK_DIR/SOURCES/$TARBALL" \
             $SOURCE_TAG
 
@@ -77,7 +79,7 @@ generate_rpm_sources() {
     fi
 
     tar czf "$WORK_DIR/SOURCES/$TARBALL" \
-        --transform "s,^./,$NAME-$VERSION/," \
+        --transform "s,^./,$NAME-$VERSION${_PHASE}/," \
         --exclude .git \
         --exclude bin \
         -C "$SRC_DIR" \
@@ -113,6 +115,9 @@ generate_rpm_spec() {
     # hard-code commit ID
     commands="${commands}; s/%{?_commit_id}/${_COMMIT_ID}/g"
 
+    # hard-code phase
+    commands="${commands}; s/%{?_phase}/${_PHASE}/g"
+
     # hard-code patch
     if [ "$PATCH" != "" ] ; then
         commands="${commands}; s/# Patch: jss-VERSION-RELEASE.patch/Patch: $PATCH/g"
@@ -138,6 +143,9 @@ while getopts v-: arg ; do
         source-tag=?*)
             SOURCE_TAG="$LONG_OPTARG"
             ;;
+        spec=?*)
+            SPEC_TEMPLATE="$LONG_OPTARG"
+            ;;
         with-timestamp)
             WITH_TIMESTAMP=true
             ;;
@@ -161,7 +169,7 @@ while getopts v-: arg ; do
         '')
             break # "--" terminates argument processing
             ;;
-        work-dir* | source-tag* | dist*)
+        work-dir* | source-tag* | spec* | dist*)
             echo "ERROR: Missing argument for --$OPTARG option" >&2
             exit 1
             ;;
@@ -181,12 +189,10 @@ done
 shift $((OPTIND-1))
 
 if [ "$#" -lt 1 ] ; then
-    echo "ERROR: Missing build target" >&2
-    usage
-    exit 1
+    BUILD_TARGET=rpm
+else
+    BUILD_TARGET=$1
 fi
-
-BUILD_TARGET=$1
 
 if [ "$DEBUG" = true ] ; then
     echo "WORK_DIR: $WORK_DIR"
@@ -201,7 +207,10 @@ if [ "$BUILD_TARGET" != "src" ] &&
     exit 1
 fi
 
-SPEC_TEMPLATE="$SRC_DIR/$NAME.spec.in"
+if [ "$SPEC_TEMPLATE" = "" ] ; then
+    SPEC_TEMPLATE="$SRC_DIR/$NAME.spec"
+fi
+
 VERSION="`rpmspec -P "$SPEC_TEMPLATE" | grep "^Version:" | awk '{print $2;}'`"
 
 if [ "$DEBUG" = true ] ; then
@@ -212,6 +221,16 @@ RELEASE="`rpmspec -P "$SPEC_TEMPLATE" --undefine dist | grep "^Release:" | awk '
 
 if [ "$DEBUG" = true ] ; then
     echo "RELEASE: $RELEASE"
+fi
+
+spec=$(<"$SPEC_TEMPLATE")
+regex=$'%global *_phase *([^\n]+)'
+if [[ $spec =~ $regex ]] ; then
+    _PHASE="${BASH_REMATCH[1]}"
+fi
+
+if [ "$DEBUG" = true ] ; then
+    echo "PHASE: ${_PHASE}"
 fi
 
 if [ "$WITH_TIMESTAMP" = true ] ; then

@@ -3,20 +3,41 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss;
 
-import org.mozilla.jss.crypto.*;
-import org.mozilla.jss.util.*;
-import org.mozilla.jss.asn1.*;
-import java.security.cert.CertificateException;
 import java.security.GeneralSecurityException;
-import org.mozilla.jss.pkcs11.PK11Cert;
-import java.util.*;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateException;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Vector;
+
+import org.mozilla.jss.asn1.ANY;
+import org.mozilla.jss.asn1.ASN1Util;
+import org.mozilla.jss.asn1.INTEGER;
+import org.mozilla.jss.asn1.InvalidBERException;
+import org.mozilla.jss.crypto.Algorithm;
+import org.mozilla.jss.crypto.AlreadyInitializedException;
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.crypto.InternalCertificate;
+import org.mozilla.jss.crypto.NoSuchItemOnTokenException;
+import org.mozilla.jss.crypto.ObjectNotFoundException;
+import org.mozilla.jss.crypto.SignatureAlgorithm;
+import org.mozilla.jss.crypto.TokenException;
+import org.mozilla.jss.crypto.TokenSupplier;
+import org.mozilla.jss.crypto.TokenSupplierManager;
+import org.mozilla.jss.crypto.X509Certificate;
 import org.mozilla.jss.pkcs11.KeyType;
-import org.mozilla.jss.pkcs11.PK11Token;
+import org.mozilla.jss.pkcs11.PK11Cert;
 import org.mozilla.jss.pkcs11.PK11Module;
 import org.mozilla.jss.pkcs11.PK11SecureRandom;
-import java.security.cert.CertificateEncodingException;
-import org.mozilla.jss.CRLImportException;
+import org.mozilla.jss.pkcs11.PK11Token;
 import org.mozilla.jss.provider.java.security.JSSMessageDigestSpi;
+import org.mozilla.jss.util.Assert;
+import org.mozilla.jss.util.InvalidNicknameException;
+import org.mozilla.jss.util.PasswordCallback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class is the starting poing for the crypto package.
@@ -28,26 +49,55 @@ import org.mozilla.jss.provider.java.security.JSSMessageDigestSpi;
  */
 public final class CryptoManager implements TokenSupplier
 {
+    public static Logger logger = LoggerFactory.getLogger(CryptoManager.class);
+
+    static {
+
+        logger.info("CryptoManager: loading JSS library");
+
+        try {
+            System.loadLibrary("jss4");
+            logger.info("CryptoManager: loaded JSS library from java.library.path");
+
+        } catch (UnsatisfiedLinkError e) {
+
+            try {
+                System.load("/usr/lib64/jss/libjss4.so");
+                logger.info("CryptoManager: loaded JSS library from /usr/lib64/jss/libjss4.so");
+
+            } catch (UnsatisfiedLinkError e1) {
+                System.load("/usr/lib/jss/libjss4.so");
+                logger.info("CryptoManager: loaded JSS library from /usr/lib/jss/libjss4.so");
+            }
+        }
+    }
+
     /**
      * note: this is obsolete in NSS
      * CertUsage options for validation
      */
     public final static class CertUsage {
+
+        static private ArrayList<CertUsage> list = new ArrayList<>();
+
         private int usage;
         private String name;
-        static private ArrayList list = new ArrayList();
-        private CertUsage() {};
+
+        private CertUsage() {
+        }
+
         private CertUsage(int usage, String name) {
             this.usage = usage;
             this.name =  name;
-            this.list.add(this);
+            list.add(this);
 
         }
+
         public int getUsage() {
             return usage;
         }
 
-        static public Iterator getCertUsages() {
+        static public Iterator<CertUsage> getCertUsages() {
             return list.iterator();
 
         }
@@ -68,554 +118,6 @@ public final class CryptoManager implements TokenSupplier
         public static final CertUsage ProtectedObjectSigner = new CertUsage(9, "ProtectedObjectSigner");
         public static final CertUsage StatusResponder = new CertUsage(10, "StatusResponder");
         public static final CertUsage AnyCA = new CertUsage(11, "AnyCA");
-    }
-
-    /**
-     * CertificateUsage options for validation
-     */
-    public final static class CertificateUsage {
-        private int usage;
-        private String name;
-
-        // certificateUsage, these must be kept in sync with nss/lib/certdb/certt.h
-        private static final int certificateUsageCheckAllUsages = 0x0000;
-        private static final int certificateUsageSSLClient = 0x0001;
-        private static final int certificateUsageSSLServer = 0x0002;
-        private static final int certificateUsageSSLServerWithStepUp = 0x0004;
-        private static final int certificateUsageSSLCA = 0x0008;
-        private static final int certificateUsageEmailSigner = 0x0010;
-        private static final int certificateUsageEmailRecipient = 0x0020;
-        private static final int certificateUsageObjectSigner = 0x0040;
-        private static final int certificateUsageUserCertImport = 0x0080;
-        private static final int certificateUsageVerifyCA = 0x0100;
-        private static final int certificateUsageProtectedObjectSigner = 0x0200;
-        private static final int certificateUsageStatusResponder = 0x0400;
-        private static final int certificateUsageAnyCA = 0x0800;
-
-        static private ArrayList list = new ArrayList();
-        private CertificateUsage() {};
-        private CertificateUsage(int usage, String name) {
-            this.usage = usage;
-            this.name =  name;
-            this.list.add(this);
-
-        }
-        public int getUsage() {
-            return usage;
-        }
-
-        static public Iterator getCertificateUsages() {
-            return list.iterator();
-
-        }
-        public String toString() {
-            return name;
-        }
-
-        public static final CertificateUsage CheckAllUsages = new CertificateUsage(certificateUsageCheckAllUsages, "CheckAllUsages");
-        public static final CertificateUsage SSLClient = new CertificateUsage(certificateUsageSSLClient, "SSLClient");
-        public static final CertificateUsage SSLServer = new CertificateUsage(certificateUsageSSLServer, "SSLServer");
-        public static final CertificateUsage SSLServerWithStepUp = new CertificateUsage(certificateUsageSSLServerWithStepUp, "SSLServerWithStepUp");
-        public static final CertificateUsage SSLCA = new CertificateUsage(certificateUsageSSLCA, "SSLCA");
-        public static final CertificateUsage EmailSigner = new CertificateUsage(certificateUsageEmailSigner, "EmailSigner");
-        public static final CertificateUsage EmailRecipient = new CertificateUsage(certificateUsageEmailRecipient, "EmailRecipient");
-        public static final CertificateUsage ObjectSigner = new CertificateUsage(certificateUsageObjectSigner, "ObjectSigner");
-        public static final CertificateUsage UserCertImport = new CertificateUsage(certificateUsageUserCertImport, "UserCertImport");
-        public static final CertificateUsage VerifyCA = new CertificateUsage(certificateUsageVerifyCA, "VerifyCA");
-        public static final CertificateUsage ProtectedObjectSigner = new CertificateUsage(certificateUsageProtectedObjectSigner, "ProtectedObjectSigner");
-        public static final CertificateUsage StatusResponder = new CertificateUsage(certificateUsageStatusResponder, "StatusResponder");
-        public static final CertificateUsage AnyCA = new CertificateUsage(certificateUsageAnyCA, "AnyCA");
-
-        /*
-                The folllowing usages cannot be verified:
-                   certUsageAnyCA
-                   certUsageProtectedObjectSigner
-                   certUsageUserCertImport
-                   certUsageVerifyCA
-        */
-        public static final int basicCertificateUsages = /*0x0b80;*/
-                certificateUsageUserCertImport |
-                certificateUsageVerifyCA |
-                certificateUsageProtectedObjectSigner |
-                certificateUsageAnyCA ;
-    }
-
-    public final static class NotInitializedException extends Exception {}
-    public final static class NicknameConflictException extends Exception {}
-    public final static class UserCertConflictException extends Exception {}
-    public final static class InvalidLengthException extends Exception {}
-
-    /**
-     * The various options that can be used to initialize CryptoManager.
-     */
-    public final static class InitializationValues {
-        protected InitializationValues() {
-            Assert.notReached("Default constructor");
-        }
-
-        /////////////////////////////////////////////////////////////
-        // Constants
-        /////////////////////////////////////////////////////////////
-        /**
-         * Token names must be this length exactly.
-         */
-        public final int TOKEN_LENGTH = 33;
-        /**
-         * Slot names must be this length exactly.
-         */
-        public final int SLOT_LENGTH = 65;
-        /**
-         * ManufacturerID must be this length exactly.
-         */
-        public final int MANUFACTURER_LENGTH = 33;
-        /**
-         * Library description must be this length exactly.
-         */
-        public final int LIBRARY_LENGTH = 33;
-
-        /**
-         * This class enumerates the possible modes for FIPS compliance.
-         */
-        public static final class FIPSMode {
-            private FIPSMode() {}
-
-            /**
-             * Enable FIPS mode.
-             */
-            public static final FIPSMode ENABLED = new FIPSMode();
-            /**
-             * Disable FIPS mode.
-             */
-            public static final FIPSMode DISABLED = new FIPSMode();
-            /**
-             * Leave FIPS mode unchanged.  All servers except Admin
-             * Server should use this, because only Admin Server should
-             * be altering FIPS mode.
-             */
-            public static final FIPSMode UNCHANGED = new FIPSMode();
-                }
-
-        public InitializationValues(String configDir) {
-            this.configDir = configDir;
-        }
-
-        public InitializationValues(String configDir, String certPrefix,
-            String keyPrefix, String secmodName)
-        {
-            this.configDir = configDir;
-            this.certPrefix = certPrefix;
-            this.keyPrefix = keyPrefix;
-            this.secmodName = secmodName;
-        }
-
-        public String configDir = null;
-        public String certPrefix = null;
-        public String keyPrefix = null;
-        public String secmodName = null;
-
-        /**
-         * The password callback to be used by JSS whenever a password
-         * is needed. May be NULL, in which the library will immediately fail
-         * to get a password if it tries to login automatically while
-         * performing
-         * a cryptographic operation.  It will still work if the token
-         * has been manually logged in with <code>CryptoToken.login</code>.
-         * <p>The default is a <code>ConsolePasswordCallback</code>.
-         */
-        public PasswordCallback passwordCallback =
-            new ConsolePasswordCallback();
-
-        /**
-         * The FIPS mode of the security library.  Servers should
-         * use <code>FIPSMode.UNCHANGED</code>, since only
-         * Admin Server is supposed to alter this value.
-         * <p>The default is <code>FIPSMode.UNCHANGED</code>.
-         */
-        public FIPSMode fipsMode = FIPSMode.UNCHANGED;
-
-        /**
-         * To open the databases in read-only mode, set this flag to
-         * <code>true</code>.  The default is <code>false</code>, meaning
-         * the databases are opened in read-write mode.
-         */
-        public boolean readOnly = false;
-
-        ////////////////////////////////////////////////////////////////////
-        // Manufacturer ID
-        ////////////////////////////////////////////////////////////////////
-        /**
-         * Returns the Manufacturer ID of the internal PKCS #11 module.
-         * <p>The default is <code>"mozilla.org                     "</code>.
-         */
-        public String getManufacturerID() { return manufacturerID; }
-
-        /**
-         * Sets the Manufacturer ID of the internal PKCS #11 module.
-         * This value must be exactly <code>MANUFACTURER_LENGTH</code>
-         * characters long.
-         * @exception InvalidLengthException If <code>s.length()</code> is not
-         *      exactly <code>MANUFACTURER_LENGTH</code>.
-         */
-        public void setManufacturerID(String s) throws InvalidLengthException {
-            if( s.length() != MANUFACTURER_LENGTH ) {
-                throw new InvalidLengthException();
-            }
-            manufacturerID = s;
-        }
-        private String manufacturerID =
-            "mozilla.org                      ";
-
-        ////////////////////////////////////////////////////////////////////
-        // Library Description
-        ////////////////////////////////////////////////////////////////////
-        /**
-         * Returns the description of the internal PKCS #11 module.
-         * <p>The default is <code>"Internal Crypto Services         "</code>.
-         */
-        public String getLibraryDescription() { return libraryDescription; }
-
-        /**
-         * Sets the description of the internal PKCS #11 module.
-         * This value must be exactly <code>LIBRARY_LENGTH</code>
-         *  characters long.
-         * @exception InvalidLengthException If <code>s.length()</code> is
-         *      not exactly <code>LIBRARY_LENGTH</code>.
-         */
-        public void setLibraryDescription(String s)
-            throws InvalidLengthException
-        {
-            if( s.length() != LIBRARY_LENGTH ) {
-                throw new InvalidLengthException();
-            }
-            libraryDescription = s;
-        }
-        private String libraryDescription =
-            "Internal Crypto Services         ";
-
-        ////////////////////////////////////////////////////////////////////
-        // Internal Token Description
-        ////////////////////////////////////////////////////////////////////
-        /**
-         * Returns the description of the internal PKCS #11 token.
-         * <p>The default is <code>"Internal Crypto Services Token   "</code>.
-         */
-        public String getInternalTokenDescription() {
-            return internalTokenDescription;
-        }
-
-        /**
-         * Sets the description of the internal PKCS #11 token.
-         * This value must be exactly <code>TOKEN_LENGTH</code> characters long.
-         * @exception InvalidLengthException If <code>s.length()</code> is
-         *      not exactly <code>TOKEN_LENGTH</code>.
-         */
-        public void setInternalTokenDescription(String s)
-            throws InvalidLengthException
-        {
-            if(s.length() != TOKEN_LENGTH) {
-                throw new InvalidLengthException();
-            }
-            internalTokenDescription = s;
-        }
-        private String internalTokenDescription =
-            "NSS Generic Crypto Services      ";
-
-        ////////////////////////////////////////////////////////////////////
-        // Internal Key Storage Token Description
-        ////////////////////////////////////////////////////////////////////
-        /**
-         * Returns the description of the internal PKCS #11 key storage token.
-         * <p>The default is <code>"Internal Key Storage Token       "</code>.
-         */
-        public String getInternalKeyStorageTokenDescription() {
-            return internalKeyStorageTokenDescription;
-        }
-
-        /**
-         * Sets the description of the internal PKCS #11 key storage token.
-         * This value must be exactly <code>TOKEN_LENGTH</code> characters long.
-         * @exception InvalidLengthException If <code>s.length()</code> is
-         *      not exactly <code>TOKEN_LENGTH</code>.
-         */
-        public void setInternalKeyStorageTokenDescription(String s)
-            throws InvalidLengthException
-        {
-            if(s.length() != TOKEN_LENGTH) {
-                throw new InvalidLengthException();
-            }
-            internalKeyStorageTokenDescription = s;
-        }
-        private String internalKeyStorageTokenDescription =
-            "Internal Key Storage Token       ";
-
-        ////////////////////////////////////////////////////////////////////
-        // Internal Slot Description
-        ////////////////////////////////////////////////////////////////////
-        /**
-         * Returns the description of the internal PKCS #11 slot.
-         * <p>The default is <code>"NSS Internal Cryptographic Services                              "</code>.
-         */
-        public String getInternalSlotDescription() {
-            return internalSlotDescription;
-        }
-
-        /**
-         * Sets the description of the internal PKCS #11 slot.
-         * This value must be exactly <code>SLOT_LENGTH</code> characters
-         * long.
-         * @exception InvalidLengthException If <code>s.length()</code> is
-         *      not exactly <code>SLOT_LENGTH</code>.
-         */
-        public void setInternalSlotDescription(String s)
-            throws InvalidLengthException
-        {
-            if(s.length() != SLOT_LENGTH)  {
-                throw new InvalidLengthException();
-            }
-            internalSlotDescription = s;
-        }
-        private String internalSlotDescription =
-            "NSS Internal Cryptographic Services                              ";
-
-        ////////////////////////////////////////////////////////////////////
-        // Internal Key Storage Slot Description
-        ////////////////////////////////////////////////////////////////////
-        /**
-         * Returns the description of the internal PKCS #11 key storage slot.
-         * <p>The default is <code>"NSS Internal Private Key and Certificate Storage                 "</code>.
-
-         */
-        public String getInternalKeyStorageSlotDescription() {
-            return internalKeyStorageSlotDescription;
-        }
-
-        /**
-         * Sets the description of the internal PKCS #11 key storage slot.
-         * This value must be exactly <code>SLOT_LENGTH</code> characters
-         * long.
-         * @exception InvalidLengthException If <code>s.length()</code> is
-         *      not exactly <code>SLOT_LENGTH</code>.
-         */
-        public void setInternalKeyStorageSlotDescription(String s)
-            throws InvalidLengthException
-        {
-            if(s.length() != SLOT_LENGTH) {
-                throw new InvalidLengthException();
-            }
-            internalKeyStorageSlotDescription = s;
-        }
-        private String internalKeyStorageSlotDescription =
-            "NSS User Private Key and Certificate Services                    ";
-
-        ////////////////////////////////////////////////////////////////////
-        // FIPS Slot Description
-        ////////////////////////////////////////////////////////////////////
-        /**
-         * Returns the description of the internal PKCS #11 FIPS slot.
-         * <p>The default is
-         * <code>"NSS FIPS 140-2 User Private Key Services"</code>.
-         */
-        public String getFIPSSlotDescription() {
-            return FIPSSlotDescription;
-        }
-
-        /**
-         * Sets the description of the internal PKCS #11 FIPS slot.
-         * This value must be exactly <code>SLOT_LENGTH</code> characters
-         * long.
-         * @exception InvalidLengthException If <code>s.length()</code> is
-         *      not exactly <code>SLOT_LENGTH</code>.
-         */
-        public void setFIPSSlotDescription(String s)
-            throws InvalidLengthException
-        {
-            if(s.length() != SLOT_LENGTH) {
-                throw new InvalidLengthException();
-            }
-            FIPSSlotDescription = s;
-        }
-        private String FIPSSlotDescription =
-            "NSS FIPS 140-2 User Private Key Services                         ";
-
-        ////////////////////////////////////////////////////////////////////
-        // FIPS Key Storage Slot Description
-        ////////////////////////////////////////////////////////////////////
-        /**
-         * Returns the description of the internal PKCS #11 FIPS
-         * Key Storage slot.
-         * <p>The default is
-         * <code>"NSS FIPS 140-2 User Private Key Services"</code>.
-         */
-        public String getFIPSKeyStorageSlotDescription() {
-            return FIPSKeyStorageSlotDescription;
-        }
-
-        /**
-         * Sets the description of the internal PKCS #11 FIPS Key Storage slot.
-         * This value must be exactly <code>SLOT_LENGTH</code> characters
-         * long.
-         * @exception InvalidLengthException If <code>s.length()</code> is
-         *      not exactly <code>SLOT_LENGTH</code>.
-         */
-        public void setFIPSKeyStorageSlotDescription(String s)
-            throws InvalidLengthException
-        {
-            if(s.length() != SLOT_LENGTH) {
-                throw new InvalidLengthException();
-            }
-            FIPSKeyStorageSlotDescription = s;
-        }
-        private String FIPSKeyStorageSlotDescription =
-            "NSS FIPS 140-2 User Private Key Services                         ";
-
-        /**
-         * To have NSS check the OCSP responder for when verifying
-         * certificates, set this flags to true. It is false by
-         * default.
-         */
-        public boolean ocspCheckingEnabled = false;
-
-        /**
-         * Specify the location and cert of the responder.
-         * If OCSP checking is enabled *and* this variable is
-         * set to some URL, all OCSP checking will be done via
-         * this URL.
-         *
-         * If this variable is null, the OCSP responder URL will
-         * be obtained from the AIA extension in the certificate
-         * being queried.
-         *
-         * If this is set, you must also set ocspResponderCertNickname
-         *
-         */
-        public String ocspResponderURL = null;
-
-        /**
-         * The nickname of the cert to trust (expected) to
-         * sign the OCSP responses.
-         * Only checked when the OCSPResponder value is set.
-         */
-        public String ocspResponderCertNickname = null;
-
-
-        /**
-         * Install the JSS crypto provider. Default is true.
-         */
-        public boolean installJSSProvider = true;
-
-        /**
-         * Remove the Sun crypto provider. Default is false.
-         */
-        public boolean removeSunProvider = false;
-
-        /**
-         * If <tt>true</tt>, none of the underlying NSS components will
-         * be initialized. Only the Java portions of JSS will be
-         * initialized. This should only be used if NSS has been initialized
-         * elsewhere.
-         *
-         * <p>Specifically, the following components will <b>not</b> be
-         *  configured by <tt>CryptoManager.initialize</tt> if this flag is set:
-         * <ul>
-         * <li>The NSS databases.
-         * <li>OCSP checking.
-         * <li>The NSS password callback.
-         * <li>The internal PKCS #11 software token's identifier labels:
-         *      slot, token, module, and manufacturer.
-         * <li>The minimum PIN length for the software token.
-         * <li>The frequency with which the user must login to the software
-         *      token.
-         * <li>The cipher strength policy (export/domestic).
-         * </ul>
-         *
-         * <p>The default is <tt>false</tt>.
-         */
-        public boolean initializeJavaOnly = false;
-
-        /**
-         * Enable PKIX verify rather than the old cert library,
-         * to verify certificates. Default is false.
-         */
-        public boolean PKIXVerify = false;
-
-        /**
-         * Don't open the cert DB and key DB's, just
-         * initialize the volatile certdb. Default is false.
-         */
-        public boolean noCertDB = false;
-
-        /**
-         * Don't open the security module DB,
-         * just initialize the PKCS #11 module.
-         * Default is false.
-         */
-        public boolean noModDB = false;
-
-        /**
-         * Continue to force initializations even if the
-         * databases cannot be opened.
-         * Default is false.
-         */
-        public boolean forceOpen = false;
-
-        /**
-         * Don't try to look for the root certs module
-         * automatically.
-         * Default is false.
-         */
-        public boolean noRootInit = false;
-
-        /**
-         * Use smaller tables and caches.
-         * Default is false.
-         */
-        public boolean optimizeSpace = false;
-
-        /**
-         * only load PKCS#11 modules that are
-         * thread-safe, ie. that support locking - either OS
-         * locking or NSS-provided locks . If a PKCS#11
-         * module isn't thread-safe, don't serialize its
-         * calls; just don't load it instead. This is necessary
-         * if another piece of code is using the same PKCS#11
-         * modules that NSS is accessing without going through
-         * NSS, for example the Java SunPKCS11 provider.
-         * Default is false.
-         */
-        public boolean PK11ThreadSafe = false;
-
-        /**
-         * Init PK11Reload to ignore the CKR_CRYPTOKI_ALREADY_INITIALIZED
-         * error when loading PKCS#11 modules. This is necessary
-         * if another piece of code is using the same PKCS#11
-         * modules that NSS is accessing without going through
-         * NSS, for example Java SunPKCS11 provider.
-         * default is false.
-         */
-        public boolean PK11Reload = false;
-
-        /**
-         * never call C_Finalize on any
-         * PKCS#11 module. This may be necessary in order to
-         * ensure continuous operation and proper shutdown
-         * sequence if another piece of code is using the same
-         * PKCS#11 modules that NSS is accessing without going
-         * through NSS, for example Java SunPKCS11 provider.
-         * The following limitation applies when this is set :
-         * SECMOD_WaitForAnyTokenEvent will not use
-         * C_WaitForSlotEvent, in order to prevent the need for
-         * C_Finalize. This call will be emulated instead.
-         * Default is false.
-         */
-        public boolean noPK11Finalize = false;
-
-        /**
-         * Sets 4 recommended options for applications that
-         * use both NSS and the Java SunPKCS11 provider.
-         * Default is false.
-         */
-        public boolean cooperate = false;
-
     }
 
     ////////////////////////////////////////////////////
@@ -653,17 +155,18 @@ public final class CryptoManager implements TokenSupplier
      * loaded cryptographic modules for the token.
      *
      * @param name The name of the token.
+     * @return The token.
      * @exception org.mozilla.jss.NoSuchTokenException If no token
      *  is found with the given name.
      */
     public synchronized CryptoToken getTokenByName(String name)
         throws NoSuchTokenException
     {
-        Enumeration tokens = getAllTokens();
+        Enumeration<CryptoToken> tokens = getAllTokens();
         CryptoToken token;
 
         while(tokens.hasMoreElements()) {
-            token = (CryptoToken) tokens.nextElement();
+            token = tokens.nextElement();
             try {
                 if( name.equals(token.getName()) ) {
                     return token;
@@ -678,15 +181,17 @@ public final class CryptoManager implements TokenSupplier
     /**
      * Retrieves all tokens that support the given algorithm.
      *
+     * @param alg Algorithm.
+     * @return Enumeration of tokens.
      */
-    public synchronized Enumeration getTokensSupportingAlgorithm(Algorithm alg)
+    public synchronized Enumeration<CryptoToken> getTokensSupportingAlgorithm(Algorithm alg)
     {
-        Enumeration tokens = getAllTokens();
-        Vector goodTokens = new Vector();
+        Enumeration<CryptoToken> tokens = getAllTokens();
+        Vector<CryptoToken> goodTokens = new Vector<>();
         CryptoToken tok;
 
         while(tokens.hasMoreElements()) {
-            tok = (CryptoToken) tokens.nextElement();
+            tok = tokens.nextElement();
             if( tok.doesAlgorithm(alg) ) {
                 goodTokens.addElement(tok);
             }
@@ -702,13 +207,13 @@ public final class CryptoManager implements TokenSupplier
      *      is a <code>CryptoToken</code>
      * @see org.mozilla.jss.crypto.CryptoToken
      */
-    public synchronized Enumeration getAllTokens() {
-        Enumeration modules = getModules();
-        Enumeration tokens;
-        Vector allTokens = new Vector();
+    public synchronized Enumeration<CryptoToken> getAllTokens() {
+        Enumeration<PK11Module> modules = getModules();
+        Enumeration<CryptoToken> tokens;
+        Vector<CryptoToken> allTokens = new Vector<>();
 
         while(modules.hasMoreElements()) {
-            tokens = ((PK11Module)modules.nextElement()).getTokens();
+            tokens = modules.nextElement().getTokens();
             while(tokens.hasMoreElements()) {
                 allTokens.addElement( tokens.nextElement() );
             }
@@ -724,14 +229,14 @@ public final class CryptoManager implements TokenSupplier
      * @return All tokens accessible from JSS, except for the built-in
      *      internal tokens.
      */
-    public synchronized Enumeration getExternalTokens() {
-        Enumeration modules = getModules();
-        Enumeration tokens;
+    public synchronized Enumeration<CryptoToken> getExternalTokens() {
+        Enumeration<PK11Module> modules = getModules();
+        Enumeration<CryptoToken> tokens;
         PK11Token token;
-        Vector allTokens = new Vector();
+        Vector<CryptoToken> allTokens = new Vector<>();
 
         while(modules.hasMoreElements()) {
-            tokens = ((PK11Module)modules.nextElement()).getTokens();
+            tokens = modules.nextElement().getTokens();
             while(tokens.hasMoreElements()) {
                 token = (PK11Token) tokens.nextElement();
                 if( ! token.isInternalCryptoToken() &&
@@ -751,7 +256,7 @@ public final class CryptoManager implements TokenSupplier
      *      item in the enumeration is a <code>PK11Module</code>.
      * @see org.mozilla.jss.pkcs11.PK11Module
      */
-    public synchronized Enumeration getModules() {
+    public synchronized Enumeration<PK11Module> getModules() {
         return moduleVector.elements();
     }
 
@@ -763,7 +268,7 @@ public final class CryptoManager implements TokenSupplier
      * and updated whenever 1) a new module is added, 2) a module is deleted,
      * or 3) FIPS mode is switched.
      */
-    private Vector moduleVector;
+    private Vector<PK11Module> moduleVector;
 
     /**
      * Re-creates the Vector of modules that is stored by CryptoManager.
@@ -771,11 +276,11 @@ public final class CryptoManager implements TokenSupplier
      * wrap each one in a PK11Module, and storing the PK11Module in the vector.
      */
     private synchronized void reloadModules() {
-        moduleVector = new Vector();
+        moduleVector = new Vector<>();
         putModulesInVector(moduleVector);
 
         // Get the internal tokens
-        Enumeration tokens = getAllTokens();
+        Enumeration<CryptoToken> tokens = getAllTokens();
 
         internalCryptoToken = null;
         internalKeyStorageToken = null;
@@ -808,7 +313,7 @@ public final class CryptoManager implements TokenSupplier
      * Native code to traverse all PKCS #11 modules, wrap each one in
      * a PK11Module, and insert each PK11Module into the given vector.
      */
-    private native void putModulesInVector(Vector vector);
+    private native void putModulesInVector(Vector<PK11Module> vector);
 
 
     ///////////////////////////////////////////////////////////////////////
@@ -827,10 +332,11 @@ public final class CryptoManager implements TokenSupplier
      * Retrieve the single instance of CryptoManager.
      * This cannot be called before initialization.
      *
-     * @see #initialize(CryptoManager.InitializationValues)
+     * @see #initialize(InitializationValues)
      * @exception NotInitializedException If
      *      <code>initialize(InitializationValues</code> has not yet been
      *      called.
+     * @return CryptoManager instance.
      */
     public synchronized static CryptoManager getInstance()
         throws NotInitializedException
@@ -878,6 +384,8 @@ public final class CryptoManager implements TokenSupplier
      * not thread-safe to change this.
      * <p>The callback may be NULL, in which case password callbacks will
      * fail gracefully.
+     *
+     * @param pwcb Password callback.
      */
     public synchronized void setPasswordCallback(PasswordCallback pwcb) {
         passwordCallback = pwcb;
@@ -887,6 +395,8 @@ public final class CryptoManager implements TokenSupplier
 
     /**
      * Returns the currently registered password callback.
+     *
+     * @return Password callback.
      */
     public synchronized PasswordCallback getPasswordCallback() {
         return passwordCallback;
@@ -912,6 +422,8 @@ public final class CryptoManager implements TokenSupplier
      *  the key database, or it was currupted.
      * @exception org.mozilla.jss.CertDatabaseException Unable
      *  to open the certificate database, or it was currupted.
+     * @exception AlreadyInitializedException If the security subsystem is already initialized.
+     * @exception GeneralSecurityException If other security error occurred.
      **/
     public static synchronized void initialize( String configDir )
         throws  KeyDatabaseException,
@@ -935,6 +447,8 @@ public final class CryptoManager implements TokenSupplier
      *  the key database, or it was corrupted.
      * @exception org.mozilla.jss.CertDatabaseException Unable
      *  to open the certificate database, or it was currupted.
+     * @exception AlreadyInitializedException If security subsystem is already initialized.
+     * @exception GeneralSecurityException If other security error occurred.
      **/
     public static synchronized void initialize( InitializationValues values )
         throws
@@ -946,13 +460,16 @@ public final class CryptoManager implements TokenSupplier
         if(instance != null) {
             throw new AlreadyInitializedException();
         }
-        loadNativeLibraries();
+
         if (values.ocspResponderURL != null) {
             if (values.ocspResponderCertNickname == null) {
                 throw new GeneralSecurityException(
                     "Must set ocspResponderCertNickname");
             }
         }
+
+        logger.info("CryptoManager: initializing NSS database at " + values.configDir);
+
         initializeAllNative2(values.configDir,
                             values.certPrefix,
                             values.keyPrefix,
@@ -996,14 +513,20 @@ public final class CryptoManager implements TokenSupplier
         // an infinite loop as the Security manager tries to instantiate the
         // digest to verify its own JAR file.
         JSSMessageDigestSpi mds = new JSSMessageDigestSpi.SHA1();
+        logger.debug("Loaded " + mds);
+
         // Force the KeyType class to load before we can install JSS as a
         // provider.  JSS's signature provider accesses KeyType.
         KeyType kt = KeyType.getKeyTypeFromAlgorithm(
             SignatureAlgorithm.RSASignatureWithSHA1Digest);
+        logger.debug("Loaded " + kt);
 
         if( values.installJSSProvider ) {
             int position = java.security.Security.insertProviderAt(
                             new JSSProvider(), 1);
+            if (position < 0) {
+                logger.warn("JSS provider is already installed");
+            }
             // This returns -1 if the provider was already installed, in which
             // case it is not installed again.  Is this
             // an error? I don't think so, although it might be confusing
@@ -1177,20 +700,16 @@ public final class CryptoManager implements TokenSupplier
         try {
             return importCertPackageNative(certPackage, null, true, false);
         } catch(NicknameConflictException e) {
-            Assert.notReached("importing CA certs caused nickname conflict");
-            Debug.trace(Debug.ERROR,
-                "importing CA certs caused nickname conflict");
+            logger.error("importing CA certs caused nickname conflict", e);
+            throw new RuntimeException("Importing CA certs caused nickname conflict: " + e.getMessage(), e);
         } catch(UserCertConflictException e) {
-            Assert.notReached("importing CA certs caused user cert conflict");
-            Debug.trace(Debug.ERROR,
-                "importing CA certs caused user cert conflict");
+            logger.error("importing CA certs caused user cert conflict", e);
+            throw new RuntimeException("Importing CA certs caused user cert conflict: " + e.getMessage(), e);
         } catch(NoSuchItemOnTokenException e) {
-            Assert.notReached("importing CA certs caused NoSuchItemOnToken"+
-                "Exception");
-            Debug.trace(Debug.ERROR,
-                "importing CA certs caused NoSuchItemOnTokenException");
+            logger.error("importing CA certs caused NoSuchItemOnTokenException", e);
+            throw new RuntimeException("Importing CA certs caused NoSuchItemOnToken"+
+                "Exception: " + e.getMessage(), e);
         }
-        return null;
     }
 
     /**
@@ -1200,6 +719,9 @@ public final class CryptoManager implements TokenSupplier
      * @param cert the certificate you want to add
      * @param nickname the nickname you want to refer to the certificate as
      *        (must not be null)
+     * @return Certificate object.
+     * @throws TokenException If an error occurred in the token.
+     * @throws InvalidNicknameException If the nickname is invalid.
      */
 
     public InternalCertificate
@@ -1247,6 +769,7 @@ public final class CryptoManager implements TokenSupplier
      *    [ note that CRLs are not retrieved automatically ]. Can be null
      * @exception CRLImportException If the package encoding
      *      was not recognized.
+     * @exception TokenException If an error occurred in the token.
      */
      public void
     importCRL(byte[] crl,String url)
@@ -1331,6 +854,7 @@ public final class CryptoManager implements TokenSupplier
      *      The issuer name has ASN.1 type <i>Name</i>, which is defined in
      *      X.501.
      * @param serialNumber The certificate serial number.
+     * @return Certificate object.
      * @exception ObjectNotFoundException If the certificate is not found
      *      in the internal certificate database or on any PKCS #11 token.
      * @exception TokenException If an error occurs in the security library.
@@ -1345,8 +869,7 @@ public final class CryptoManager implements TokenSupplier
         return findCertByIssuerAndSerialNumberNative(derIssuer,
             sn.getContents() );
       } catch( InvalidBERException e ) {
-        Assert.notReached("Invalid BER encoding of INTEGER");
-        return null;
+        throw new RuntimeException("Invalid BER encoding of INTEGER: " + e.getMessage(), e);
       }
     }
 
@@ -1377,6 +900,7 @@ public final class CryptoManager implements TokenSupplier
      *      with the highest certificate on the chain that was found.
      * @throws CertificateException If the certificate is not recognized
      *      by the underlying provider.
+     * @throws TokenException If an error occurred in the token.
      */
     public org.mozilla.jss.crypto.X509Certificate[]
     buildCertificateChain(org.mozilla.jss.crypto.X509Certificate leaf)
@@ -1400,6 +924,8 @@ public final class CryptoManager implements TokenSupplier
     /**
      * Looks up the PrivateKey matching the given certificate.
      *
+     * @param cert Certificate.
+     * @return Private key.
      * @exception ObjectNotFoundException If no private key can be
      *      found matching the given certificate.
      * @exception TokenException If an error occurs in the security library.
@@ -1410,8 +936,7 @@ public final class CryptoManager implements TokenSupplier
     {
         Assert._assert(cert!=null);
         if(! (cert instanceof org.mozilla.jss.pkcs11.PK11Cert)) {
-            Assert.notReached("non-pkcs11 cert passed to PK11Finder");
-            throw new ObjectNotFoundException();
+            throw new ObjectNotFoundException("Non-pkcs11 cert passed to PK11Finder");
         }
         return findPrivKeyByCertNative(cert);
     }
@@ -1459,7 +984,7 @@ public final class CryptoManager implements TokenSupplier
 
 
     public static final String
-    JAR_JSS_VERSION     = "JSS_VERSION = JSS_4_4_0_RTM";
+    JAR_JSS_VERSION     = "JSS_VERSION = JSS_4_5";
     public static final String
     JAR_JDK_VERSION     = "JDK_VERSION = N/A";
     public static final String
@@ -1469,38 +994,8 @@ public final class CryptoManager implements TokenSupplier
     public static final String
     JAR_NSPR_VERSION    = "NSPR_VERSION = N/A";
 
-    /**
-     * Loads the JSS dynamic library if necessary.
-     * <p>This method is idempotent.
-     */
-    synchronized static void loadNativeLibraries()
-    {
-        if( ! mNativeLibrariesLoaded ) {
-            try { // 64 bit rhel/fedora
-                System.load( "/usr/lib64/jss/libjss4.so" );
-                Debug.trace(Debug.VERBOSE, "64-bit jss library loaded");
-                mNativeLibrariesLoaded = true;
-            } catch( UnsatisfiedLinkError e ) {
-                try { // 32 bit rhel/fedora
-                    System.load( "/usr/lib/jss/libjss4.so" );
-                    Debug.trace(Debug.VERBOSE, "32-bit jss library loaded");
-                    mNativeLibrariesLoaded = true;
-                } catch( UnsatisfiedLinkError f ) {
-                    try {// possibly other platforms
-                        System.loadLibrary( "jss4" );
-                        Debug.trace(Debug.VERBOSE, "jss library loaded");
-                        mNativeLibrariesLoaded = true;
-                    } catch( UnsatisfiedLinkError g ) {
-                        Debug.trace(Debug.VERBOSE, "jss library load failed");
-                    }
-                }
-            }
-        }
-    }
-    static private boolean mNativeLibrariesLoaded = false;
-
     // Hashtable is synchronized.
-    private Hashtable perThreadTokenTable = new Hashtable();
+    private Hashtable<Thread, CryptoToken> perThreadTokenTable = new Hashtable<>();
 
     /**
      * Sets the default token for the current thread. This token will
@@ -1536,7 +1031,7 @@ public final class CryptoManager implements TokenSupplier
      */
     public CryptoToken getThreadToken() {
         CryptoToken tok =
-            (CryptoToken) perThreadTokenTable.get(Thread.currentThread());
+            perThreadTokenTable.get(Thread.currentThread());
         if( tok == null ) {
             tok = getInternalKeyStorageToken();
         }
@@ -1605,7 +1100,7 @@ public final class CryptoManager implements TokenSupplier
             currCertificateUsage = verifyCertificateNowCUNative(nickname,
                 checkSig);
 
-            if (currCertificateUsage == CertificateUsage.basicCertificateUsages){ 
+            if (currCertificateUsage == CertificateUsage.basicCertificateUsages){
                 // cert is good for nothing
                 return false;
             } else
@@ -1719,10 +1214,11 @@ public final class CryptoManager implements TokenSupplier
      * previously set values.ocspCheckingEnabled and
      * values.ocspResponderURL/values.ocspResponderCertNickname
      * configureOCSP will allow changing of the the OCSPResponder at runtime.
-     *      * @param ocspChecking true or false to enable/disable OCSP
-     *      * @param ocspResponderURL - url of the OCSP responder
-     *      * @param ocspResponderCertNickname - the nickname of the OCSP
+     * @param ocspCheckingEnabled true or false to enable/disable OCSP
+     * @param ocspResponderURL - url of the OCSP responder
+     * @param ocspResponderCertNickname - the nickname of the OCSP
      *        signer certificate or the CA certificate found in the cert DB
+     * @throws GeneralSecurityException If a security error has occurred.
      */
 
     public void configureOCSP(
@@ -1743,12 +1239,13 @@ public final class CryptoManager implements TokenSupplier
 
     /**
      * change OCSP cache settings
-     *      * @param ocsp_cache_size max cache entries
-     *      * @param ocsp_min_cache_entry_duration minimum seconds to next fetch attempt
-     *      * @param ocsp_max_cache_entry_duration maximum seconds to next fetch attempt
+     * @param ocsp_cache_size max cache entries
+     * @param ocsp_min_cache_entry_duration minimum seconds to next fetch attempt
+     * @param ocsp_max_cache_entry_duration maximum seconds to next fetch attempt
+     * @throws GeneralSecurityException If a security error has occurred.
      */
     public void OCSPCacheSettings(
-        int ocsp_cache_size, 
+        int ocsp_cache_size,
         int ocsp_min_cache_entry_duration,
         int ocsp_max_cache_entry_duration)
     throws GeneralSecurityException
@@ -1759,14 +1256,15 @@ public final class CryptoManager implements TokenSupplier
     }
 
     private native void OCSPCacheSettingsNative(
-        int ocsp_cache_size, 
+        int ocsp_cache_size,
         int ocsp_min_cache_entry_duration,
         int ocsp_max_cache_entry_duration)
                     throws GeneralSecurityException;
 
     /**
      * set OCSP timeout value
-     *      * @param ocspTimeout OCSP timeout in seconds
+     * @param ocsp_timeout OCSP timeout in seconds
+     * @throws GeneralSecurityException If a security error has occurred.
      */
     public void setOCSPTimeout(
         int ocsp_timeout )

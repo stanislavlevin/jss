@@ -3,16 +3,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss.asn1;
 
+import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.IOException;
-import java.io.FileInputStream;
-import java.io.BufferedInputStream;
 import java.util.Vector;
+
 import org.mozilla.jss.util.Assert;
-import java.math.BigInteger;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 
 /**
  * An ASN.1 SEQUENCE.  This class is an ordered collection of ASN.1 values.
@@ -59,7 +57,7 @@ public class SEQUENCE extends SET implements ASN1Value {
  */
 public static class Template implements ASN1Template {
 
-    private Vector elements = new Vector();
+    private Vector<Element> elements = new Vector<>();
 
     private void addElement(Element el) {
         elements.addElement( el );
@@ -81,6 +79,7 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySequence.addElement( new SubType.Template() );
      * </pre>
+     * @param t Sub-template.
      */
     public void addElement( ASN1Template t ) {
         addElement( new Element(null, t, false) );
@@ -88,6 +87,8 @@ public static class Template implements ASN1Template {
 
     /**
      * Inserts the template at the given index.
+     * @param t Sub-template.
+     * @param index Index.
      */
     public void insertElementAt( ASN1Template t, int index )
     {
@@ -106,6 +107,8 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySequence.addElement( new Tag(0), new SubType.Template());
      * </pre>
+     * @param implicitTag Implicit tag.
+     * @param t Sub-template.
      */
     public void addElement( Tag implicitTag, ASN1Template t ) {
         addElement( new Element(implicitTag, t, false) );
@@ -113,6 +116,9 @@ public static class Template implements ASN1Template {
 
     /**
      * Inserts the template with the given implicit tag at the given index.
+     * @param implicit Implicit tag.
+     * @param t Sub-Template.
+     * @param index Index.
      */
     public void insertElementAt( Tag implicit, ASN1Template t,
         int index )
@@ -131,6 +137,7 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySequence.addOptionalElement( new SubType.Template() );
      * </pre>
+     * @param t Optional sub-template.
      */
     public void addOptionalElement( ASN1Template t ) {
         addElement( new Element(null, t, true) );
@@ -138,6 +145,8 @@ public static class Template implements ASN1Template {
 
     /**
      * Inserts the optional template at the given index.
+     * @param t Optional sub-template.
+     * @param index Index.
      */
     public void insertOptionalElementAt( ASN1Template t, int index )
     {
@@ -156,6 +165,8 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySequence.addOptionalElement( new SubType.Template() );
      * </pre>
+     * @param implicitTag Implicit tag.
+     * @param t Optional sub-template.
      */
     public void addOptionalElement( Tag implicitTag, ASN1Template t ) {
         addElement( new Element(implicitTag, t, true) );
@@ -164,6 +175,9 @@ public static class Template implements ASN1Template {
     /**
      * Inserts the optional template with the given default
      * value at the given index.
+     * @param implicit Implicit tag.
+     * @param t Optional sub-template.
+     * @param index Index.
      */
     public void insertOptionalElementAt( Tag implicit, ASN1Template t,
         int index )
@@ -183,6 +197,7 @@ public static class Template implements ASN1Template {
      * <pre>
      *  mySequence.addElement( new INTEGER.Template(), new INTEGER(1) );
      * </pre>
+     * @param t Sub-template.
      * @param def The default value for this field, which will be used if
      *      no value is supplied by the encoded structure. It must be of
      *      the same type as what the template would produce.
@@ -194,6 +209,9 @@ public static class Template implements ASN1Template {
     /**
      * Inserts the template with the given default
      * value at the given index.
+     * @param t Sub-template.
+     * @param def Default value.
+     * @param index Index.
      */
     public void insertElementAt( ASN1Template t, ASN1Value def, int index )
     {
@@ -213,6 +231,8 @@ public static class Template implements ASN1Template {
      *  mySequence.addElement( new Tag(0), new INTEGER.Template(),
      *      new INTEGER(1) );
      * </pre>
+     * @param implicitTag Implicit tag.
+     * @param t Sub-template.
      * @param def The default value for this field, which will be used if
      *      no value is supplied by the encoded structure. It must be of
      *      the same type as what the template would produce.
@@ -224,6 +244,10 @@ public static class Template implements ASN1Template {
     /**
      * Inserts the template with the given implicit tag and given default
      * value at the given index.
+     * @param implicit Implicit tag.
+     * @param t Sub-template.
+     * @param def Default value.
+     * @param index Index.
      */
     public void insertElementAt( Tag implicit, ASN1Template t, ASN1Value def,
         int index )
@@ -234,35 +258,43 @@ public static class Template implements ASN1Template {
     /**
      * Returns the implicit tag of the item stored at the given index.
      * May be NULL if no implicit tag was specified.
+     * @param index Index.
+     * @return Tag.
      */
     public Tag implicitTagAt( int index ) {
-        return ((Element)elements.elementAt(index)).getImplicitTag();
+        return elements.elementAt(index).getImplicitTag();
     }
 
     /**
      * Returns the sub-template stored at the given index.
+     * @param index Index.
+     * @return Sub-template.
      */
     public ASN1Template templateAt( int index ) {
-        return ((Element)elements.elementAt(index)).getTemplate();
+        return elements.elementAt(index).getTemplate();
     }
 
     /**
      * Returns whether the sub-template at the given index is optional.
+     * @param index Index.
+     * @return True if the sub-template is optional.
      */
     public boolean isOptionalAt( int index ) {
-        return ((Element)elements.elementAt(index)).isOptional();
+        return elements.elementAt(index).isOptional();
     }
 
     /**
      * Returns the default value for the sub-template at the given index.
      * May return NULL if no default value was specified.
+     * @param index Index.
+     * @return Default value.
      */
     public ASN1Value defaultAt( int index ) {
-        return ((Element)elements.elementAt(index)).getDefault();
+        return elements.elementAt(index).getDefault();
     }
 
     /**
-     * Returns the number of elements in this SEQUENCE template.
+     * @return The number of elements in this SEQUENCE template.
      */
     public int size() {
         return elements.size();
@@ -277,6 +309,7 @@ public static class Template implements ASN1Template {
 
     /**
      * Removes the sub-template at the given index.
+     * @param index Index.
      */
     public void removeElementAt(int index) {
         elements.removeElementAt(index);
@@ -292,6 +325,7 @@ public static class Template implements ASN1Template {
 
     /**
      * Decodes a SEQUENCE from its BER encoding.
+     * @param istream Input stream.
      */
     public ASN1Value decode(InputStream istream)
         throws IOException, InvalidBERException
@@ -302,6 +336,8 @@ public static class Template implements ASN1Template {
     /**
      * Decodes a SEQUENCE from its BER encoding, where the SEQUENCE itself has
      * an implicit tag.
+     * @param tag Tag.
+     * @param istream Input stream.
      */
     public ASN1Value decode(Tag tag, InputStream istream)
         throws IOException, InvalidBERException
@@ -334,7 +370,7 @@ public static class Template implements ASN1Template {
 
             // skip over items that don't match.  Hopefully they are
             // optional or have a default.  Otherwise, it's an error.
-            Element e = (Element) elements.elementAt(index);
+            Element e = elements.elementAt(index);
             if( (lookAhead == null) || lookAhead.isEOC() ||
                     ! e.tagMatch( lookAhead.getTag() ) )
             {
@@ -363,23 +399,26 @@ public static class Template implements ASN1Template {
             // Decode this element
             ASN1Template t = e.getTemplate();
             ASN1Value val;
-            CountingStream countstream = new CountingStream(istream);
-            if( e.getImplicitTag() == null ) {
-                val = t.decode(countstream);
-            } else {
-                val = t.decode(e.getImplicitTag(), countstream);
-            }
 
-            // Decrement remaining count
-            long len = countstream.getNumRead();
-            if( remainingContent != -1 ) {
-                if( remainingContent < len ) {
-                    // this item went past the end of the SEQUENCE
-                    throw new InvalidBERException("Item went "+
-                        (len-remainingContent)+" bytes past the end of"+
-                        " the SEQUENCE");
+            try (CountingStream countstream = new CountingStream(istream)) {
+
+                if (e.getImplicitTag() == null) {
+                    val = t.decode(countstream);
+                } else {
+                    val = t.decode(e.getImplicitTag(), countstream);
                 }
-                remainingContent -= len;
+
+                // Decrement remaining count
+                long len = countstream.getNumRead();
+                if (remainingContent != -1) {
+                    if (remainingContent < len) {
+                        // this item went past the end of the SEQUENCE
+                        throw new InvalidBERException("Item went "+
+                            (len-remainingContent) + " bytes past the end of" +
+                            " the SEQUENCE");
+                    }
+                    remainingContent -= len;
+                }
             }
 
             // Store this element in the SEQUENCE
@@ -435,6 +474,9 @@ public static class Template implements ASN1Template {
 
         /**
          * Creates a new element, which may or may not be optional.
+         * @param implicitTag Implicit tag.
+         * @param type Type.
+         * @param optional Optional.
          */
         public Element(Tag implicitTag, ASN1Template type, boolean optional)
         {
@@ -443,6 +485,10 @@ public static class Template implements ASN1Template {
 
         /**
          * Creates a new element, which may or may not be optional.
+         * @param implicitTag Implicit tag.
+         * @param type Type.
+         * @param optional Optional.
+         * @param doesProduceOutput True if produces output.
          */
         public Element(Tag implicitTag, ASN1Template type, boolean optional,
             boolean doesProduceOutput)
@@ -456,6 +502,9 @@ public static class Template implements ASN1Template {
 
         /**
          * Creates a new element with a default value.
+         * @param implicitTag Implicit tag.
+         * @param type Type.
+         * @param defaultVal Default value.
          */
         public Element(Tag implicitTag, ASN1Template type, ASN1Value defaultVal)
         {
@@ -613,10 +662,14 @@ public static class OF_Template implements ASN1Template {
             type.addElement( new OF_Template( new INTEGER.Template() ) );
             type.addElement( new OF_Template( new INTEGER.Template() ) );
 
-            FileInputStream fin = new FileInputStream(args[0]);
-            System.out.println("Available: "+fin.available());
-            byte[] stuff = new byte[ fin.available() ];
-            ASN1Util.readFully(stuff, fin);
+            byte[] stuff;
+
+            try (FileInputStream fin = new FileInputStream(args[0])) {
+                System.out.println("Available: " + fin.available());
+                stuff = new byte[fin.available()];
+                ASN1Util.readFully(stuff, fin);
+            }
+
             SEQUENCE s=null;
             for( int i = 0; i < 1; i++) {
                 s = (SEQUENCE) type.decode( new ByteArrayInputStream(stuff) );
@@ -642,7 +695,7 @@ public static class OF_Template implements ASN1Template {
                 } else if(v instanceof EXPLICIT) {
                     EXPLICIT ex = (EXPLICIT) v;
                     INTEGER in = (INTEGER) ex.getContent();
-                    System.out.println("EXPLICIT ["+ex.getTag()+"]: "+ 
+                    System.out.println("EXPLICIT ["+ex.getTag()+"]: "+
                         "INTEGER: "+in);
                 } else if(v instanceof OCTET_STRING) {
                     OCTET_STRING os = (OCTET_STRING) v;
@@ -717,7 +770,7 @@ public static class OF_Template implements ASN1Template {
 
             nested = new SEQUENCE();
             seq.addElement( nested );
-            
+
 
             seq.encode(System.out);
             System.out.flush();

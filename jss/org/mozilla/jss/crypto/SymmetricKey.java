@@ -3,8 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss.crypto;
 
-import java.util.Hashtable;
 import java.security.NoSuchAlgorithmException;
+import java.util.Hashtable;
 
 public interface SymmetricKey {
 
@@ -14,7 +14,7 @@ public interface SymmetricKey {
     public static final Type RC2 = Type.RC2;
     public static final Type SHA1_HMAC = Type.SHA1_HMAC;
     public static final Type AES = Type.AES;
-    
+
     public Type getType();
 
     public CryptoToken getOwningToken();
@@ -25,6 +25,7 @@ public interface SymmetricKey {
     public byte[] getKeyData() throws NotExtractableException;
 
     public static class NotExtractableException extends Exception {
+        private static final long serialVersionUID = 1L;
         public NotExtractableException() {
             super();
         }
@@ -45,7 +46,7 @@ public interface SymmetricKey {
 
     public final static class Type {
         // all names converted to lowercase for case insensitivity
-        private static Hashtable nameMap = new Hashtable();
+        private static Hashtable<String, Type> nameMap = new Hashtable<>();
 
         private String name;
         private KeyGenAlgorithm keyGenAlg;

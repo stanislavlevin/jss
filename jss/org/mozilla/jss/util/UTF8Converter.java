@@ -4,7 +4,7 @@
 
 package org.mozilla.jss.util;
 
-import java.io.*;
+import java.io.CharConversionException;
 
 /**
  * Class for converting between char arrays and byte arrays.  The conversion
@@ -29,7 +29,7 @@ public class UTF8Converter {
 	 *	characters encoded in UTF-16.  This array must not be null.
 	 * @exception CharConversionException If the input characters are invalid.
 	 */
-	public static byte[] UnicodeToUTF8(char[] unicode) 
+	public static byte[] UnicodeToUTF8(char[] unicode)
 		throws CharConversionException
 	{
 		return UnicodeToUTF8(unicode, false);
@@ -70,7 +70,6 @@ public class UTF8Converter {
 		char c; // Unicode character
 		int ucs4; // UCS4 encoding of a character
 		boolean failed = true;
-		boolean orphaned_low = false;
 
 		Assert._assert(unicode != null);
 		if(unicode == null) {
@@ -95,7 +94,7 @@ public class UTF8Converter {
 				if( c >= 0xd800 && c <= 0xdbff) {
 					// This is the high half of a UTF-16 char
 					ucs4 = (c-0xd800)<<10;
-	
+
 					// Now get the lower half
 					if(uni == unicode.length-1) {
 						//There is no lower half
@@ -108,10 +107,13 @@ public class UTF8Converter {
 					}
 					ucs4 |= c-0xdc00;
 					ucs4 += 0x00010000;
+
 				} else if(c >=0xdc00 && c <=0xdfff) {
-					// orphaned low-half char
-					orphaned_low = true;
-					throw new CharConversionException();
+			            // My class rejects orphaned low-half characters, but the Java
+			            // class allows them.  I think they really are bogus, so
+			            // let's pretend the Java class rejects them too.
+				    throw new CharConversionException("Orphaned low-half character: 0x" + Integer.toHexString(c));
+
 				} else {
 					// UCS2 char to UCS4
 					ucs4 = unicode[uni];
@@ -193,60 +195,6 @@ public class UTF8Converter {
 			}
 			ucs4 = 0;
 			c = 0;
-
-			if(Debug.DEBUG) {
-				// Verify this operation by comparing its output
-				// to that of the standard Java conversion routines.
-				// WARNING: This means passwords will be left in memory,
-				// so Ninja is not secure in debugging mode!
-			  try {
-				OutputStreamWriter writer;
-				ByteArrayOutputStream barray;
-				int i;
-				byte[] output;
-
-				barray = new ByteArrayOutputStream();
-
-				writer = new OutputStreamWriter(barray, "UTF8");
-				writer.write(unicode, 0, unicode.length);
-				writer.close();
-
-				output = barray.toByteArray();
-
-				// My class rejects orphaned low-half characters, but the Java
-				// class allows them.  I think they really are bogus, so
-				// let's pretend the Java class rejects them too.
-				if(orphaned_low) {
-					throw new IOException();
-				}
-
-				// It worked with the Java class, so it should have worked
-				// with my class
-				Assert._assert(utf8 != null);
-
-				// Compare the arrays
-				if(nullTerminate) {
-					Assert._assert(utf8.length-1 == output.length);
-				} else {
-					Assert._assert(utf8.length == output.length);
-				}
-				for(i=0; i<output.length; i++) {
-					Assert._assert(utf8[i] == output[i]);
-				}
-
-			  } catch(UnsupportedEncodingException e) {
-					// Huh? No UTF8?
-					Assert.notReached("No UTF8 encoding conversion");
-			  } catch(IOException e) {
-					// If it failed with the Java class it should have failed
-					// with mine
-					Assert._assert(utf8 == null);
-			  } catch(Exception e) {
-					// Nothing else should be thrown here
-					Assert.notReached("UTF8Converter validation threw an"+
-						" unexpected exception");
-			  }
-			}
 		}
 	}
 
@@ -275,16 +223,6 @@ public class UTF8Converter {
 		char[] unicode;
 		byte[] utf8;
 		int i, j;
-
-		Debug.setLevel(Debug.OBNOXIOUS);
-
-		if(!Debug.DEBUG) {
-			System.out.println("***WARNING***");
-			System.out.println("Debugging mode is disabled. This code only"+
-				" checks itself in debug mode. The test is almost worthless"+
-				" in optimized mode."
-			);
-		}
 
 	  try {
 
@@ -318,11 +256,11 @@ public class UTF8Converter {
 			'\u0800', '\u3167', '\ud7ff', '\ue000', '\uffff'};
 		utf8 = UnicodeToUTF8(unicode);
 		for(i=0; i<10; i++) {
-			System.out.print( Integer.toHexString((int)unicode[i]) + " ");
+			System.out.print( Integer.toHexString(unicode[i]) + " ");
 		}
 		System.out.println();
 		for(i=0; i<utf8.length; i++) {
-			System.out.print( Integer.toHexString((byte)utf8[i]) + " ");
+			System.out.print( Integer.toHexString(utf8[i]) + " ");
 		}
 		System.out.println();
 
@@ -369,7 +307,7 @@ public class UTF8Converter {
 		try {
 			unicode = new char[] {'\ud800'};
 			utf8 = UnicodeToUTF8(unicode);
-			Assert.notReached("should have failed on bad UCS4");
+			throw new RuntimeException("should have failed on bad UCS4");
 		} catch (CharConversionException e) {
 			System.out.println("Correctly caught bad UCS4\n");
 		}
@@ -381,7 +319,7 @@ public class UTF8Converter {
 		try {
 			unicode = new char[] {'\ud800', '\u007f'};
 			utf8 = UnicodeToUTF8(unicode);
-			Assert.notReached("should have failed on bad UCS4");
+			throw new RuntimeException("should have failed on bad UCS4");
 		} catch (CharConversionException e) {
 			System.out.println("Correctly caught bad UCS4\n");
 		}
@@ -393,7 +331,7 @@ public class UTF8Converter {
 		try {
 			unicode = new char[] {'\u0032', '\udc01', '\u0033'};
 			utf8 = UnicodeToUTF8(unicode);
-			Assert.notReached("should have failed on bad UCS4");
+			throw new RuntimeException("should have failed on bad UCS4");
 		} catch (CharConversionException e) {
 			System.out.println("Correctly caught bad UCS4\n");
 		}
@@ -416,14 +354,6 @@ public class UTF8Converter {
 
 	  } catch(CharConversionException e) {
 			System.out.println("Error converting Unicode "+e);
-	  } finally {
-		if(!Debug.DEBUG) {
-			System.out.println("***WARNING***");
-			System.out.println("Debugging mode is disabled. This code only"+
-				" checks itself in debug mode. The test is almost worthless"+
-				" in optimized mode."
-			);
-		}
 	  }
 	}
 }

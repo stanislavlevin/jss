@@ -3,13 +3,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss.asn1;
 
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import org.mozilla.jss.util.Assert;
-import java.util.Vector;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.StringTokenizer;
+import java.util.Vector;
+
+import org.mozilla.jss.util.Assert;
 
 public class OBJECT_IDENTIFIER implements ASN1Value {
 
@@ -47,7 +48,7 @@ public class OBJECT_IDENTIFIER implements ASN1Value {
      * The OID space for RSA's PKCS #2, which has since been folded into
      * PKCS #1.
      */
-    public static final OBJECT_IDENTIFIER PKCS2 = 
+    public static final OBJECT_IDENTIFIER PKCS2 =
         PKCS.subBranch(2);
 
     /**
@@ -183,6 +184,7 @@ public class OBJECT_IDENTIFIER implements ASN1Value {
     /**
      * Creates an OBJECT_IDENTIFIER from an array of longs, which constitute
      * the numbers that make up the OBJECT IDENTIFIER.
+     * @param numbers Numbers.
      */
     public OBJECT_IDENTIFIER( long[] numbers ) {
         checkLongArray(numbers);
@@ -203,7 +205,7 @@ public class OBJECT_IDENTIFIER implements ASN1Value {
         Assert._assert(numbers.length >= 2);
         Assert._assert( numbers[0]==0 || numbers[0]==1 || numbers[0]==2 );
     }
-    
+
 
     /**
      * Creates an OBJECT_IDENTIFIER from a String version.  The proper format
@@ -213,7 +215,8 @@ public class OBJECT_IDENTIFIER implements ASN1Value {
      * Because the toString() method here provides a different format, we also
      * allow that format, for example:
      * "<code>{3 2 456 53 23 64}</code>".
-     * 
+     *
+     * @param dottedOID OID string.
      * @exception NumberFormatException If the given string cannot be
      *      parsed into an OID.
      */
@@ -226,10 +229,10 @@ public class OBJECT_IDENTIFIER implements ASN1Value {
         if (dottedOID.startsWith("{")) {
             // input string is of the format provided by OBJECT_IDENTIFIER,toString()
             // convert this first to dotted OID
-        	
+
         	// remove the leading and trailing brackets
             dottedOID = dottedOID.substring(1, dottedOID.length()-1);
-            
+
             // convert spaces to dots
             dottedOID = dottedOID.replaceAll(" ", ".");
         }
@@ -262,6 +265,8 @@ public class OBJECT_IDENTIFIER implements ASN1Value {
      * { 1 3 5 6 },
      * then calling <code>oid.subBranch(4)</code> would return a new
      * OBJECT_IDENTIFIER with the value { 1 3 5 6 4 }.
+     * @param num Number.
+     * @return New sub-branch.
      */
     public OBJECT_IDENTIFIER subBranch(long num) {
         long[] nums = new long[ numbers.length + 1];
@@ -277,6 +282,8 @@ public class OBJECT_IDENTIFIER implements ASN1Value {
      * then calling <code>oid.subBranch(new long[]{ 4, 3})</code>
      * would return a new
      * OBJECT_IDENTIFIER with the value { 1 3 5 6 4 3}.
+     * @param newNums New numbers.
+     * @return New sub-branch.
      */
     public OBJECT_IDENTIFIER subBranch(long[] newNums) {
         long[] nums = new long[ numbers.length + newNums.length];
@@ -355,8 +362,7 @@ public class OBJECT_IDENTIFIER implements ASN1Value {
             try {
                 head.encode(out);
             } catch( IOException e ) {
-                // should never happen on a byte array output stream
-                Assert.notReached("exception while encoding ASN.1 header");
+                throw new RuntimeException("Unable to encode ASN.1 header: " + e.getMessage(), e);
             }
 
             out.write( getEncodedContents(), 0, getEncodedContents().length );
@@ -418,7 +424,7 @@ public class OBJECT_IDENTIFIER implements ASN1Value {
 
         return out.toByteArray();
     }
-        
+
 
     public void encode(Tag implicitTag, OutputStream ostream)
         throws IOException
@@ -477,7 +483,7 @@ public static class Template implements ASN1Template {
                 " IDENTIFIER");
         }
 
-        Vector numberV = new Vector();
+        Vector<Long> numberV = new Vector<>();
 
         // handle first byte, which contains first two numbers
         byte b = readByte(istream);
@@ -510,7 +516,7 @@ public static class Template implements ASN1Template {
         // convert Vector to array
         long numbers[] = new long[ numberV.size() ];
         for(int i = 0; i < numbers.length; i++) {
-            numbers[i] = ((Long)numberV.elementAt(i)).longValue();
+            numbers[i] = numberV.elementAt(i).longValue();
         }
 
         // create OBJECT_IDENTIFIER from array
@@ -536,7 +542,7 @@ public static class Template implements ASN1Template {
         Assert._assert( (n & 0xff) == n );
         return (byte) n;
     }
-        
+
 } // end of OBJECT_IDENTIFIER.Template
 
 }

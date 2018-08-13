@@ -5,6 +5,7 @@ package org.mozilla.jss;
 
 public final class JSSProvider extends java.security.Provider {
 
+    private static final long serialVersionUID = 1L;
     /********************************************************************/
     /* The VERSION Strings should be updated in the following           */
     /* files everytime a new release of JSS is generated:               */
@@ -18,7 +19,7 @@ public final class JSSProvider extends java.security.Provider {
     /********************************************************************/
     /* QUESTION: When do we change MINOR and PATCH to 4 and 0? */
     private static int JSS_MAJOR_VERSION  = 4;
-    private static int JSS_MINOR_VERSION  = 4;
+    private static int JSS_MINOR_VERSION  = 5;
     private static int JSS_PATCH_VERSION  = 0;
     private static double JSS_VERSION     = JSS_MAJOR_VERSION +
                                            (JSS_MINOR_VERSION * 100 +
@@ -147,6 +148,12 @@ public final class JSSProvider extends java.security.Provider {
             "org.mozilla.jss.provider.java.security.KeyFactorySpi1_2");
         put("KeyFactory.EC",
             "org.mozilla.jss.provider.java.security.KeyFactorySpi1_2");
+
+        /////////////////////////////////////////////////////////////
+        // KeyStore
+        /////////////////////////////////////////////////////////////
+        put("KeyStore.PKCS11",
+                "org.mozilla.jss.provider.java.security.JSSKeyStoreSpi");
 
         /////////////////////////////////////////////////////////////
         // AlgorithmParameters

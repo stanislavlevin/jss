@@ -4,30 +4,32 @@
 
 package org.mozilla.jss.tests;
 
-import org.mozilla.jss.ssl.*;
-import org.mozilla.jss.CryptoManager;
-import org.mozilla.jss.ssl.*;
-import org.mozilla.jss.crypto.*;
-import org.mozilla.jss.asn1.*;
-import org.mozilla.jss.pkix.primitive.*;
-import org.mozilla.jss.pkix.cert.*;
-import org.mozilla.jss.util.PasswordCallback;
-
-
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.InetAddress;
 import java.util.Date;
 import java.util.Vector;
-import java.security.*;
-import java.net.InetAddress;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.InputStream;
+
+import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.ssl.SSLHandshakeCompletedEvent;
+import org.mozilla.jss.ssl.SSLHandshakeCompletedListener;
+import org.mozilla.jss.ssl.SSLSecurityStatus;
+import org.mozilla.jss.ssl.SSLServerSocket;
+import org.mozilla.jss.ssl.SSLSocket;
+import org.mozilla.jss.util.PasswordCallback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JSS_FileUploadServer  {
-    
-    private static Vector jssSupportedCiphers = new Vector();
+
+    public static Logger logger = LoggerFactory.getLogger(JSS_FileUploadServer.class);
+
+    private static Vector<String> jssSupportedCiphers = new Vector<>();
     private static SSLServerSocket serverSock = null;
     private static SSLSocket sock             = null;
-    
+
     private String        fServerCertNick     = null;
     private String        fServerHost         = "localhost";
     private String        fPasswordFile       = "passwords";
@@ -41,7 +43,7 @@ public class JSS_FileUploadServer  {
             "\n[server_host_name] " +
             "[cert nickname]" +
             "[testInetAddress: true|false]";
-    
+
     public static void main(String[] args) throws Exception {
         try {
             (new JSS_FileUploadServer()).doIt(args);
@@ -51,14 +53,14 @@ public class JSS_FileUploadServer  {
         }
         System.exit(0);
     }
-    
+
     public void doIt(String[] args) throws Exception {
-        
+
         if ( args.length < 1 || args[0].toLowerCase().indexOf("-h") != -1) {
             System.out.println(usage);
             System.exit(1);
         }
-        
+
         int socketCntr = 0;
         try {
             if (args[0].length() > 0 &&
@@ -73,50 +75,45 @@ public class JSS_FileUploadServer  {
             if (args[3].length() > 0)
                 fServerCertNick = args[3];
         } catch (Exception e) {}
-        
+
         CryptoManager.initialize(fCertDbPath);
         CryptoManager    cm = CryptoManager.getInstance();
         CryptoToken     tok = cm.getInternalKeyStorageToken();
         PasswordCallback cb = new FilePasswordCallback(fPasswordFile);
         tok.login(cb);
-        
+
         if (args[4].equalsIgnoreCase("true") == true) {
             TestInetAddress = true;
         }
-        
+
         // We have to configure the server session ID cache before
         // creating any server sockets.
         SSLServerSocket.configServerSessionIDCache(10, 100, 100, null);
         //Disable SSL2
         SSLSocket.enableSSL2Default(false);
-        //Note we will use the NSS default enabled ciphers suites 
-        
+        //Note we will use the NSS default enabled ciphers suites
+
         // open the server socket and bind to the port
-        if ( Constants.debug_level >= 3 )
-            System.out.println("Server about .... to create socket");
-        
+        logger.debug("Server about .... to create socket");
+
         if (TestInetAddress) {
-            if ( Constants.debug_level >= 3 )
-                System.out.println("the HostName " + fServerHost +
+            logger.debug("the HostName " + fServerHost +
                         " the Inet Address " +
                         InetAddress.getByName(fServerHost));
             serverSock = new SSLServerSocket(port, 5,
                     InetAddress.getByName(fServerHost), null , true);
         } else {
-            if ( Constants.debug_level >= 3 )
-                System.out.println("Inet set to Null");
+            logger.debug("Inet set to Null");
             serverSock = new SSLServerSocket(port, 5, null , null , true);
         }
-        
-        if ( Constants.debug_level >= 3 )
-            System.out.println("Server created socket");
-        
+
+        logger.debug("Server created socket");
+
         //serverSock.setSoTimeout(120 * 1000);
         serverSock.requireClientAuth(SSLSocket.SSL_REQUIRE_NO_ERROR);
         serverSock.setServerCertNickname(fServerCertNick);
-        if ( Constants.debug_level >= 3 )
-            System.out.println("Server specified cert by nickname");
-        
+        logger.debug("Server specified cert by nickname");
+
         System.out.println("Server ready to accept connections");
         while ( true ) {
             // accept the connection
@@ -129,7 +126,7 @@ public class JSS_FileUploadServer  {
             rwThread.start();
         }
     }
-    
+
     /**
      * ReadWrite thread class that takes a
      * SSLSocket as input and sleeps
@@ -139,20 +136,20 @@ public class JSS_FileUploadServer  {
     private class readWriteThread extends Thread {
         private SSLSocket socket = null;
         private int socketCntr   = 0;
-        
+
         public readWriteThread(SSLSocket sock, int cntr) {
             this.socket     = sock;
             this.socketCntr = cntr;
         }
-        
+
         public void run() {
-            
+
             try {
                 String socketData  = null;
                 char[] cbuf        = null;
                 int    readLength  = 0;
                 String readString  = null;
-                
+
                 InputStream  is    = socket.getInputStream();
                 BufferedReader in  = new BufferedReader(
                         new InputStreamReader(is));
@@ -170,7 +167,7 @@ public class JSS_FileUploadServer  {
             }
         }
     }
-    
+
     public static class HandshakeListener
             implements SSLHandshakeCompletedListener {
         private String who;
@@ -188,19 +185,18 @@ public class JSS_FileUploadServer  {
                 } else {
                     mesg += "(security is OFF)";
                 }
-                if ( Constants.debug_level >= 3 )
-                    System.out.println(mesg);
+                logger.debug(mesg);
             } catch(Exception e) {
-                e.printStackTrace();
+                logger.error(e.getMessage(), e);
                 boss.setFailure();
             }
         }
     }
-    
+
     public synchronized void setFailure() {
         success = false;
     }
-    
+
     public synchronized boolean getSuccess() {
         return success;
     }

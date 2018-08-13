@@ -19,7 +19,7 @@ PR_BEGIN_EXTERN_C
 
 #define INDEX_OUT_OF_BOUNDS_EXCEPTION "java/lang/IndexOutOfBoundsException"
 
-#define BAD_PADDING_EXCEPTION "org/mozilla/jss/crypto/BadPaddingException"
+#define BAD_PADDING_EXCEPTION "javax/crypto/BadPaddingException"
 
 #define BIND_EXCEPTION "java/net/BindException"
 
@@ -63,7 +63,7 @@ PR_BEGIN_EXTERN_C
 
 #define KEYSTORE_EXCEPTION "java/security/KeyStoreException"
 
-#define NICKNAME_CONFLICT_EXCEPTION "org/mozilla/jss/CryptoManager$NicknameConflictException"
+#define NICKNAME_CONFLICT_EXCEPTION "org/mozilla/jss/NicknameConflictException"
 
 #define NO_SUCH_ALG_EXCEPTION "java/security/NoSuchAlgorithmException"
 
@@ -78,6 +78,8 @@ PR_BEGIN_EXTERN_C
 #define OBJECT_NOT_FOUND_EXCEPTION "org/mozilla/jss/crypto/ObjectNotFoundException"
 
 #define OUT_OF_MEMORY_ERROR "java/lang/OutOfMemoryError"
+
+#define PK11_EXCEPTION "org/mozilla/jss/pkcs11/PK11Exception"
 
 #define PQG_PARAM_GEN_EXCEPTION "org/mozilla/jss/crypto/PQGParamGenException"
 
@@ -96,7 +98,7 @@ PR_BEGIN_EXTERN_C
 
 #define TOKEN_NOT_INITIALIZED_EXCEPTION "org/mozilla/jss/pkcs11/PK11Token$NotInitializedException"
 
-#define USER_CERT_CONFLICT_EXCEPTION "org/mozilla/jss/CryptoManager$UserCertConflictException"
+#define USER_CERT_CONFLICT_EXCEPTION "org/mozilla/jss/UserCertConflictException"
 
 PR_END_EXTERN_C
 

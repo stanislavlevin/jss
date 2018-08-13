@@ -6,7 +6,6 @@ package org.mozilla.jss.ssl;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
-import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -15,10 +14,10 @@ import java.net.UnknownHostException;
 import java.util.Enumeration;
 
 import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.NotInitializedException;
 import org.mozilla.jss.crypto.ObjectNotFoundException;
 import org.mozilla.jss.crypto.TokenException;
 import org.mozilla.jss.crypto.X509Certificate;
-import org.mozilla.jss.util.Assert;
 
 class SocketBase {
 
@@ -98,6 +97,7 @@ class SocketBase {
     static final int SSL_LIBRARY_VERSION_TLS_1_0 = 30;
     static final int SSL_LIBRARY_VERSION_TLS_1_1 = 31;
     static final int SSL_LIBRARY_VERSION_TLS_1_2 = 32;
+    static final int SSL_LIBRARY_VERSION_TLS_1_3 = 35;
     /* ssl/sslt.h */
     static final int SSL_Variant_Stream = 33;
     static final int SSL_Variant_Datagram = 34;
@@ -183,13 +183,13 @@ class SocketBase {
     native void setSSLOption(int option, int on)
             throws SocketException;
 
-    void setSSLVersionRange(org.mozilla.jss.ssl.SSLSocket.SSLVersionRange range)
+    void setSSLVersionRange(SSLVersionRange range)
             throws SocketException {
-        setSSLVersionRange(range.getMinEnum(), range.getMaxEnum());
+        setSSLVersionRange(range.getMinVersion().value(), range.getMaxVersion().value());
     }
 
     /**
-     * Sets SSL Version Range for this socket to support TLS v1.1 and v1.2
+     * Sets SSL Version Range for this socket to support TLS v1.1 to v1.3
      */
     native void setSSLVersionRange(int min, int max)
             throws SocketException;
@@ -403,7 +403,7 @@ class SocketBase {
             X509Certificate cert = cm.findCertByNickname(nick);
             setClientCert(cert);
 
-        } catch (CryptoManager.NotInitializedException nie) {
+        } catch (NotInitializedException nie) {
             throw new RuntimeException(nie);
 
         } catch (ObjectNotFoundException onfe) {
@@ -432,14 +432,14 @@ class SocketBase {
                 strBuf.append(bottomException.toString());
             }
 
-            Class excepClass = topException.getClass();
-            Class stringClass = java.lang.String.class;
-            Constructor cons = excepClass.getConstructor(new Class[] { stringClass });
+            Class<?> excepClass = topException.getClass();
+            Class<?> stringClass = java.lang.String.class;
+            Constructor<?> cons = excepClass.getConstructor(new Class[] { stringClass });
 
             return (Throwable) cons.newInstance(new Object[] { strBuf.toString() });
         } catch (Exception e) {
-            Assert.notReached("Problem constructing exception container");
-            return topException;
+            throw new RuntimeException("Problem constructing exception container: " + e.getMessage(), e);
+            //return topException;
         }
     }
 
@@ -455,7 +455,7 @@ class SocketBase {
             }
         }
 
-        Enumeration netInter;
+        Enumeration<NetworkInterface> netInter;
         try {
             netInter = NetworkInterface.getNetworkInterfaces();
         } catch (SocketException e) {
@@ -463,18 +463,13 @@ class SocketBase {
             return false;
         }
         while (netInter.hasMoreElements()) {
-            NetworkInterface ni = (NetworkInterface) netInter.nextElement();
-            Enumeration addrs = ni.getInetAddresses();
+            NetworkInterface ni = netInter.nextElement();
+            Enumeration<InetAddress> addrs = ni.getInetAddresses();
             while (addrs.hasMoreElements()) {
-                Object o = addrs.nextElement();
-                if (o.getClass() == InetAddress.class ||
-                        o.getClass() == Inet4Address.class ||
-                        o.getClass() == Inet6Address.class) {
-                    InetAddress iaddr = (InetAddress) o;
-                    if (o.getClass() == Inet6Address.class) {
-                        supportsIPV6 = 1;
-                        return true;
-                    }
+                InetAddress o = addrs.nextElement();
+                if (o.getClass() == Inet6Address.class) {
+                    supportsIPV6 = 1;
+                    return true;
                 }
             }
         }

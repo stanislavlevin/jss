@@ -14,7 +14,6 @@ import java.security.SignatureException;
 import java.security.NoSuchAlgorithmException;
 import java.security.MessageDigest;
 import org.mozilla.jss.crypto.X509Certificate;
-import org.mozilla.jss.pkix.cert.*;
 import org.mozilla.jss.*;
 import java.security.PublicKey;
 
@@ -192,7 +191,7 @@ public class SignerInfo implements ASN1Value {
                         SignatureAlgorithm signingAlg,
                         PrivateKey signingKey )
         throws InvalidKeyException, NoSuchAlgorithmException,
-        CryptoManager.NotInitializedException, SignatureException,
+        NotInitializedException, SignatureException,
         TokenException
     {
         if (signerIdentifier == null) {
@@ -334,7 +333,7 @@ public class SignerInfo implements ASN1Value {
      *       matching the issuer name and serial number can be found.
      */
     public void verify(byte[] messageDigest, OBJECT_IDENTIFIER contentType)
-        throws CryptoManager.NotInitializedException, NoSuchAlgorithmException,
+        throws NotInitializedException, NoSuchAlgorithmException,
         InvalidKeyException, TokenException, SignatureException,
         ObjectNotFoundException
     {
@@ -388,7 +387,7 @@ public class SignerInfo implements ASN1Value {
      */
     public void verify(byte[] messageDigest, OBJECT_IDENTIFIER contentType,
         PublicKey pubkey)
-        throws CryptoManager.NotInitializedException, NoSuchAlgorithmException,
+        throws NotInitializedException, NoSuchAlgorithmException,
         InvalidKeyException, TokenException, SignatureException
     {
 
@@ -408,7 +407,7 @@ public class SignerInfo implements ASN1Value {
     private void verifyWithoutSignedAttributes
         (byte[] messageDigest, OBJECT_IDENTIFIER contentType,
         PublicKey pubkey)
-        throws CryptoManager.NotInitializedException, NoSuchAlgorithmException,
+        throws NotInitializedException, NoSuchAlgorithmException,
         InvalidKeyException, TokenException, SignatureException
     {
         if( ! contentType.equals(ContentInfo.DATA) ) {
@@ -467,7 +466,7 @@ public class SignerInfo implements ASN1Value {
     private void verifyWithSignedAttributes
         (byte[] messageDigest, OBJECT_IDENTIFIER contentType,
         PublicKey pubkey)
-        throws CryptoManager.NotInitializedException, NoSuchAlgorithmException,
+        throws NotInitializedException, NoSuchAlgorithmException,
         InvalidKeyException, TokenException, SignatureException
     {
 

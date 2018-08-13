@@ -5,15 +5,16 @@
 package org.mozilla.jss.pkcs11;
 
 import org.mozilla.jss.util.NativeProxy;
-import org.mozilla.jss.util.Debug;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class TokenProxy extends NativeProxy {
-        public TokenProxy(byte[] pointer) {
-            super(pointer);
-        }
-        protected native void releaseNativeResources();
-        protected void finalize() throws Throwable {
-	        Debug.trace(Debug.OBNOXIOUS, "Finalizing a TokenProxy");
-            super.finalize();
-        }
+
+    public static Logger logger = LoggerFactory.getLogger(TokenProxy.class);
+
+    public TokenProxy(byte[] pointer) {
+        super(pointer);
     }
+
+    protected native void releaseNativeResources();
+}

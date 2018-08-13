@@ -6,8 +6,9 @@ Summary:        Java Security Services (JSS)
 URL:            http://www.dogtagpki.org/wiki/JSS
 License:        MPLv1.1 or GPLv2+ or LGPLv2+
 
-Version:        4.4.5
+Version:        4.5.0
 Release:        1%{?_timestamp}%{?_commit_id}%{?dist}
+# global         _phase -a1
 
 # To generate the source tarball:
 # $ git clone https://github.com/dogtagpki/jss.git
@@ -17,7 +18,7 @@ Release:        1%{?_timestamp}%{?_commit_id}%{?dist}
 #     --prefix jss-VERSION/ \
 #     -o jss-VERSION.tar.gz \
 #     <version tag>
-Source:         https://github.com/dogtagpki/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
+Source:         https://github.com/dogtagpki/%{name}/archive/v%{version}%{?_phase}/%{name}-%{version}%{?_phase}.tar.gz
 
 # To create a patch for all changes since a version tag:
 # $ git format-patch \
@@ -26,30 +27,48 @@ Source:         https://github.com/dogtagpki/%{name}/archive/v%{version}/%{name}
 #     > jss-VERSION-RELEASE.patch
 # Patch: jss-VERSION-RELEASE.patch
 
-Conflicts:      idm-console-framework < 1.1.17-4
-Conflicts:      pki-base < 10.4.0
-Conflicts:      tomcatjss < 7.2.1
+################################################################################
+# Build Dependencies
+################################################################################
 
 # autosetup
 BuildRequires:  git
 
-BuildRequires:  nss-devel >= 3.28.4-6
+BuildRequires:  gcc-c++
 BuildRequires:  nspr-devel >= 4.13.1
+BuildRequires:  nss-devel >= 3.28.4-6
+BuildRequires:  nss-tools >= 3.28.4-6
 BuildRequires:  java-devel
 BuildRequires:  jpackage-utils
-%if 0%{?fedora} >= 25 || 0%{?rhel} > 7
-BuildRequires:  perl-interpreter
+BuildRequires:  slf4j
+%if 0%{?rhel} && 0%{?rhel} <= 7
+# no slf4j-jdk14
+%else
+BuildRequires:  slf4j-jdk14
 %endif
 BuildRequires:  apache-commons-lang
 BuildRequires:  apache-commons-codec
-BuildRequires:  ldapjdk
+
+%if 0%{?fedora} >= 25 || 0%{?rhel} > 7
+BuildRequires:  perl-interpreter
+%endif
 
 Requires:       nss >= 3.28.4-6
 Requires:       java-headless
 Requires:       jpackage-utils
+Requires:       slf4j
+%if 0%{?rhel} && 0%{?rhel} <= 7
+# no slf4j-jdk14
+%else
+Requires:       slf4j-jdk14
+%endif
 Requires:       apache-commons-lang
 Requires:       apache-commons-codec
-Requires:       ldapjdk
+
+Conflicts:      ldapjdk < 4.20
+Conflicts:      idm-console-framework < 1.2
+Conflicts:      tomcatjss < 7.3.4
+Conflicts:      pki-base < 10.6.5
 
 %description
 Java Security Services (JSS) is a java native interface which provides a bridge
@@ -70,18 +89,7 @@ This package contains the API documentation for JSS.
 ################################################################################
 %prep
 
-%autosetup -n %{name}-%{version} -p 1 -S git
-
-# Prior to version 4.4.5, the source code were stored under "jss-<version>/jss"
-# path in the source tarball. Starting from version 4.4.5, the files will be
-# stored under "jss-<version>" path. However, since the spec file is still using
-# the old path, the unpacked source code has to be moved to the old path with
-# the following commands.
-
-cd ..
-mv %{name}-%{version} jss
-mkdir %{name}-%{version}
-mv jss %{name}-%{version}
+%autosetup -n %{name}-%{version}%{?_phase} -p 1 -S git
 
 ################################################################################
 %build
@@ -92,10 +100,7 @@ mv jss %{name}-%{version}
 [ -z "$USE_INSTALLED_NSPR" ] && export USE_INSTALLED_NSPR=1
 [ -z "$USE_INSTALLED_NSS" ] && export USE_INSTALLED_NSS=1
 
-# Enable compiler optimizations and disable debugging code
-# NOTE: If you ever need to create a debug build with optimizations disabled
-# just comment out this line and change in the %%install section below the
-# line that copies jars xpclass.jar to be xpclass_dbg.jar
+# Enable compiler optimizations
 export BUILD_OPT=1
 
 # Generate symbolic info for debuggers
@@ -125,59 +130,51 @@ export USE_64
 %endif
 
 # The Makefile is not thread-safe
-make -C jss/coreconf
-make -C jss
-make -C jss javadoc
+make -C coreconf
+make
+make javadoc
+make test_jss
 
 ################################################################################
 %install
-
-# Copy the license files here so we can include them in %%doc
-cp -p jss/MPL-1.1.txt .
-cp -p jss/gpl.txt .
-cp -p jss/lgpl.txt .
 
 # There is no install target so we'll do it by hand
 
 # jars
 install -d -m 0755 $RPM_BUILD_ROOT%{_jnidir}
-# NOTE: if doing a debug no opt build change xpclass.jar to xpclass_dbg.jar
-install -m 644 dist/xpclass.jar ${RPM_BUILD_ROOT}%{_jnidir}/jss4.jar
+install -m 644 ../dist/xpclass.jar ${RPM_BUILD_ROOT}%{_jnidir}/jss4.jar
 
 # We have to use the name libjss4.so because this is dynamically
 # loaded by the jar file.
 install -d -m 0755 $RPM_BUILD_ROOT%{_libdir}/jss
-install -m 0755 dist/Linux*.OBJ/lib/libjss4.so ${RPM_BUILD_ROOT}%{_libdir}/jss/
+install -m 0755 ../dist/Linux*.OBJ/lib/libjss4.so ${RPM_BUILD_ROOT}%{_libdir}/jss/
 pushd  ${RPM_BUILD_ROOT}%{_libdir}/jss
     ln -fs %{_jnidir}/jss4.jar jss4.jar
 popd
 
 # javadoc
 install -d -m 0755 $RPM_BUILD_ROOT%{_javadocdir}/%{name}-%{version}
-cp -rp dist/jssdoc/* $RPM_BUILD_ROOT%{_javadocdir}/%{name}-%{version}
-cp -p jss/jss.html $RPM_BUILD_ROOT%{_javadocdir}/%{name}-%{version}
-cp -p jss/*.txt $RPM_BUILD_ROOT%{_javadocdir}/%{name}-%{version}
+cp -rp ../dist/jssdoc/* $RPM_BUILD_ROOT%{_javadocdir}/%{name}-%{version}
+cp -p jss.html $RPM_BUILD_ROOT%{_javadocdir}/%{name}-%{version}
+cp -p *.txt $RPM_BUILD_ROOT%{_javadocdir}/%{name}-%{version}
 
 # No ldconfig is required since this library is loaded by Java itself.
 ################################################################################
 %files
 
 %defattr(-,root,root,-)
-%doc jss/jss.html jss/MPL-1.1.txt jss/gpl.txt jss/lgpl.txt
-%{_libdir}/jss/*
+%doc jss.html MPL-1.1.txt gpl.txt lgpl.txt
+%{_libdir}/*
 %{_jnidir}/*
-%{_libdir}/jss/lib*.so
 
 ################################################################################
 %files javadoc
 
 %defattr(-,root,root,-)
-%dir %{_javadocdir}/%{name}-%{version}
-%{_javadocdir}/%{name}-%{version}/*
+%{_javadocdir}/%{name}-%{version}/
 
 ################################################################################
 %changelog
-
-* Tue May 29 2018 Dogtag PKI Team <pki-devel@redhat.com> 4.4.0-0
+* Tue May 29 2018 Dogtag PKI Team <pki-devel@redhat.com> 4.5.0-0
 - To list changes in <branch> since <tag>:
   $ git log --pretty=oneline --abbrev-commit --no-decorate <tag>..<branch>

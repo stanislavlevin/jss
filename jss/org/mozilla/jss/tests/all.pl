@@ -10,13 +10,13 @@ use Cwd 'abs_path';
 use POSIX 'uname';
 
                                                                                                   
-# dist <dist_dir>
+# dist <dist_dir> <NSS bin dir> <NSS lib dir> <JSS lib dir>
 # release <java release dir> <nss release dir> <nspr release dir>
 # auto   (test the current build directory)
 
 sub usage {
     print "Usage:\n";
-    print "$0 dist <dist_dir>\n";
+    print "$0 dist <dist_dir> <NSS bin_dir> <NSS lib dir> <JSS lib dir>\n";
     print "$0 release <jss release dir> <nss release dir> "
         . "<nspr release dir>\n";
     print "$0 auto\n";
@@ -33,7 +33,7 @@ my $testdir        = "";
 my $testrun        = 0;
 my $testpass       = 0;
 my $nss_lib_dir    = "";
-my $dist_dir       = "";
+my $jss_lib_dir    = "";
 my $pathsep        = ":";
 my $scriptext      = "sh";
 my $exe_suffix     = "";
@@ -112,25 +112,28 @@ sub setup_vars {
         $scriptext = "sh";
     }
 
-    my $jar_dbg_suffix = "_dbg";
-    my $dbg_suffix     = "_DBG";
-    $ENV{BUILD_OPT} and $dbg_suffix = "";
-    $ENV{BUILD_OPT} and $jar_dbg_suffix = "";
-
     $ENV{CLASSPATH}  = "";
     $ENV{$ld_lib_path} = "" if $truncate_lib_path;
 
-
     if( $$argv[0] eq "dist" ) {
         shift @$argv;
-        $dist_dir = shift @$argv or usage("did not provide dist_dir");
 
-        $ENV{CLASSPATH} .= "$dist_dir/../xpclass$jar_dbg_suffix.jar";
-        ( -f $ENV{CLASSPATH} ) or die "$ENV{CLASSPATH} does not exist";
-        $ENV{$ld_lib_path} = $ENV{$ld_lib_path} . $pathsep . "$dist_dir/lib";
-        $nss_lib_dir   = "$dist_dir/lib";
-        $jss_rel_dir   = "$dist_dir/../classes$dbg_suffix/org";
-        $jss_classpath = "$dist_dir/../xpclass$jar_dbg_suffix.jar";
+        if (scalar @$argv != 4) {
+            usage("incorrect dist parameters");
+        }
+
+        my $dist_dir = shift @$argv;
+        $nss_bin_dir = shift @$argv;
+        $nss_lib_dir = shift @$argv;
+        $jss_lib_dir = shift @$argv;
+
+        $jss_rel_dir   = "$dist_dir/classes/org";
+        $jss_classpath = "$dist_dir/xpclass.jar";
+
+        ( -f $jss_classpath ) or die "$jss_classpath does not exist";
+
+        $ENV{CLASSPATH} .= "$jss_classpath";
+        $ENV{$ld_lib_path} = $ENV{$ld_lib_path} . $pathsep . "$nss_lib_dir";
 
     } elsif( $$argv[0] eq "auto" ) {
         my $dist_dir = `make dist_dir`;
@@ -140,14 +143,18 @@ sub setup_vars {
         chomp( $dist_dir = `(cd $dist_dir ; pwd)`);
         chomp( $obj_dir = `(cd $obj_dir ; pwd)`);
 
+        $nss_bin_dir   = "$obj_dir/bin";
         $nss_lib_dir   = "$obj_dir/lib";
-        $jss_rel_dir   = "$dist_dir/classes$dbg_suffix/org";
-        $jss_classpath = "$dist_dir/xpclass$jar_dbg_suffix.jar";
+        $jss_lib_dir   = "$obj_dir/lib";
+        $jss_rel_dir   = "$dist_dir/classes/org";
+        $jss_classpath = "$dist_dir/xpclass.jar";
 
-        $ENV{CLASSPATH} .= "$dist_dir/xpclass$jar_dbg_suffix.jar";
-        ( -f $ENV{CLASSPATH} ) or die "$ENV{CLASSPATH} does not exist";
-        #$ENV{$ld_lib_path} = $ENV{$ld_lib_path} . $pathsep . "$obj_dir/lib";
-        $ENV{$ld_lib_path} = "$obj_dir/lib";
+        ( -f $jss_classpath ) or die "$jss_classpath does not exist";
+
+        $ENV{CLASSPATH} .= "$jss_classpath";
+        #$ENV{$ld_lib_path} = $ENV{$ld_lib_path} . $pathsep . "$nss_lib_dir";
+        $ENV{$ld_lib_path} = "$nss_lib_dir";
+
     } elsif( $$argv[0] eq "release" ) {
         shift @$argv;
 
@@ -155,14 +162,19 @@ sub setup_vars {
         my $nss_rel_dir  = shift @$argv or usage();
         my $nspr_rel_dir = shift @$argv or usage();
 
-        $ENV{CLASSPATH} .= "$jss_rel_dir/../xpclass$jar_dbg_suffix.jar";
-        $ENV{$ld_lib_path} =
-            "$jss_rel_dir/lib$pathsep$nss_rel_dir/lib$pathsep$nspr_rel_dir/lib"
-            . $pathsep . $ENV{$ld_lib_path};
-        print "LD_LIBRARY_PATH is $ld_lib_path\n";
-        print "$ld_lib_path=$ENV{$ld_lib_path}\n";
+        $nspr_lib_dir = "$nspr_rel_dir/lib";
+        $nss_bin_dir = "$nss_rel_dir/bin";
         $nss_lib_dir = "$nss_rel_dir/lib";
-        $jss_classpath = "$jss_rel_dir/../xpclass$jar_dbg_suffix.jar";
+        $jss_lib_dir = "$jss_rel_dir/lib";
+        $jss_classpath = "$jss_rel_dir/../xpclass.jar";
+
+        $ENV{CLASSPATH} .= "$jss_classpath";
+        $ENV{$ld_lib_path} =
+                "$jss_lib_dir" . $pathsep .
+                "$nss_lib_dir" . $pathsep .
+                "$nspr_lib_dir" . $pathsep .
+                $ENV{$ld_lib_path};
+
     } else {
         usage();
     }
@@ -214,8 +226,8 @@ sub setup_vars {
     }
 
     #MAC OS X have the -Djava.library.path for the JSS JNI library
-    if ($osname =~ /Darwin/) {
-        $java = $java . " -Djava.library.path=$nss_lib_dir";        
+    if ($osname =~ /Darwin/ || $osname =~ /Linux/) {
+        $java = $java . " -Djava.library.path=$jss_lib_dir";
     } 
 
     $pwfile = "passwords";
@@ -417,8 +429,9 @@ if( ! -d $testdir ) {
     my @dbfiles = 
         ("$testdir/cert8.db", "$testdir/key3.db", "$testdir/secmod.db", "$testdir/rsa.pfx");
     (grep{ -f } @dbfiles)  and die "There is already an old database in $testdir";
-    my $result = system("cp $nss_lib_dir/*nssckbi* $testdir"); $result >>= 8;
-    $result and die "Failed to copy built-ins library";
+    my $result = system("cp $nss_lib_dir/*nssckbi* $testdir");
+    $result >>= 8;
+    # $result and die "Failed to copy built-ins library";
 }
 
 print "creating pkcs11config file\n";
@@ -428,108 +441,124 @@ my $result;
 my $command;
 my $serverCommand;
 
+if( $ENV{DEBIAN_BUILD} ) {
+    $jarFiles = "/usr/share/java/slf4j-api.jar:/usr/share/java/slf4j-jdk14.jar:/usr/share/java/commons-lang.jar";
+} else {
+    $jarFiles = "/usr/share/java/slf4j/slf4j-api.jar:/usr/share/java/slf4j/slf4j-jdk14.jar:/usr/share/java/commons-lang.jar";
+}
+
+$classpath = "$jarFiles:$jss_classpath";
+
+$pk12util = "pk12util$exe_suffix";
+if ($nss_bin_dir) {
+    $pk12util = "$nss_bin_dir/$pk12util";
+}
+
+$testname = "Test UTF-8 Converter";
+$command = "$java -cp $classpath org.mozilla.jss.tests.UTF8ConverterTest";
+run_test($testname, $command);
 
 $testname = "Setup DBs";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.SetupDBs $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.SetupDBs $testdir $pwfile";
 run_test($testname, $command);
 
 updateCertSN();
 $testname = "Generate known RSA cert pair";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.GenerateTestCert $testdir $pwfile $certSN localhost SHA-256/RSA CA_RSA Server_RSA Client_RSA";
+$command = "$java -cp $classpath org.mozilla.jss.tests.GenerateTestCert $testdir $pwfile $certSN localhost SHA-256/RSA CA_RSA Server_RSA Client_RSA";
 run_test($testname, $command);
 
 updateCertSN();
 $testname = "Generate known ECDSA cert pair";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.GenerateTestCert $testdir $pwfile $certSN localhost SHA-256/EC CA_ECDSA Server_ECDSA Client_ECDSA";
+$command = "$java -cp $classpath org.mozilla.jss.tests.GenerateTestCert $testdir $pwfile $certSN localhost SHA-256/EC CA_ECDSA Server_ECDSA Client_ECDSA";
 run_test($testname, $command);
 
 updateCertSN();
 $testname = "Generate known DSS cert pair";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.GenerateTestCert $testdir $pwfile $certSN localhost SHA-1/DSA CA_DSS Server_DSS Client_DSS";
+$command = "$java -cp $classpath org.mozilla.jss.tests.GenerateTestCert $testdir $pwfile $certSN localhost SHA-1/DSA CA_DSS Server_DSS Client_DSS";
 run_test($testname, $command);
 
 $testname = "Create PKCS11 cert to PKCS12 rsa.pfx";
-$command = "$nss_lib_dir/../bin/pk12util$exe_suffix -o $testdir/rsa.pfx -n CA_RSA -d $testdir -K $dbPwd -W $dbPwd";
+$command = "$pk12util -o $testdir/rsa.pfx -n CA_RSA -d $testdir -K $dbPwd -W $dbPwd";
 run_test($testname, $command);
 
 $testname = "Create PKCS11 cert to PKCS12 ecdsa.pfx";
-$command = "$nss_lib_dir/../bin/pk12util$exe_suffix -o $testdir/ecdsa.pfx -n CA_ECDSA -d $testdir -K $dbPwd -W $dbPwd";
+$command = "$pk12util -o $testdir/ecdsa.pfx -n CA_ECDSA -d $testdir -K $dbPwd -W $dbPwd";
 run_test($testname, $command);
 
 $testname = "Create PKCS11 cert to PKCS12 dss.pfx";
-$command = "$nss_lib_dir/../bin/pk12util$exe_suffix -o $testdir/dss.pfx -n CA_DSS -d $testdir -K $dbPwd -W $dbPwd";
+$command = "$pk12util -o $testdir/dss.pfx -n CA_DSS -d $testdir -K $dbPwd -W $dbPwd";
 run_test($testname, $command);
 
 #$testname = "Convert nss db  to Java keystore";
-#$command = "$java -cp $jss_classpath org.mozilla.jss.tests.NSS2JKS $keystore $dbPwd $configfile $dbPwd";
+#$command = "$java -cp $classpath org.mozilla.jss.tests.NSS2JKS $keystore $dbPwd $configfile $dbPwd";
 #run_test($testname, $command);
 
 
 $testname = "List CA certs";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.ListCACerts $testdir";
+$command = "$java -cp $classpath org.mozilla.jss.tests.ListCACerts $testdir";
 run_test($testname, $command);
 
 updateCertSN();
 $serverPort = checkPort($serverPort);
 $testname = "SSLClientAuth";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.SSLClientAuth $testdir $pwfile $serverPort $certSN";
+$command = "$java -cp $classpath org.mozilla.jss.tests.SSLClientAuth $testdir $pwfile $serverPort $certSN";
 run_test($testname, $command);
 
 
 $testname = "Key Generation";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.TestKeyGen $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.TestKeyGen $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "Key Factory";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.KeyFactoryTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.KeyFactoryTest $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "Digest";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.DigestTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.DigestTest $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "HMAC ";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.HMACTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.HMACTest $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "HMAC Unwrap";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.HmacTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.HmacTest $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "KeyWrapping ";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JCAKeyWrap $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JCAKeyWrap $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "Mozilla-JSS JCA Signature ";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JCASigTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JCASigTest $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "Mozilla-JSS NSS Signature ";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.SigTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.SigTest $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "JSS Signature test";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.SigTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.SigTest $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "Secret Decoder Ring";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.TestSDR $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.TestSDR $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "List cert by certnick";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.ListCerts $testdir Server_RSA";
+$command = "$java -cp $classpath org.mozilla.jss.tests.ListCerts $testdir Server_RSA";
 run_test($testname, $command);
 
 $testname = "Verify cert by certnick";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.VerifyCert $testdir $pwfile Server_RSA";
+$command = "$java -cp $classpath org.mozilla.jss.tests.VerifyCert $testdir $pwfile Server_RSA";
 run_test($testname, $command);
 
 $testname = "Secret Key Generation";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.SymKeyGen $testdir";
+$command = "$java -cp $classpath org.mozilla.jss.tests.SymKeyGen $testdir";
 run_test($testname, $command);
 
 $testname = "Mozilla-JSS Secret Key Generation";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JCASymKeyGen $testdir";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JCASymKeyGen $testdir";
 run_test($testname, $command);
 
 
@@ -541,24 +570,24 @@ run_test($testname, $command);
 
 $serverPort = checkPort($serverPort);
 $testname = "SSL Ciphersuite JSS Server and JSS client both";
-$serverCommand = "$run_shell ./startJssSelfServ.$scriptext $jss_classpath $testdir $hostname $serverPort  $java";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort verboseoff JSS";
+$serverCommand = "$run_shell ./startJssSelfServ.$scriptext $classpath $testdir $hostname $serverPort  $java";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort verboseoff JSS";
 # To be restored when bug 1321594 is fixed
 # run_ssl_test($testname, $serverCommand, $command);
 
 
 $serverPort = checkPort($serverPort);
 $testname = "SSL Ciphersuite JSS Server and JSSE client";
-$serverCommand = "$run_shell ./startJssSelfServ.$scriptext $jss_classpath $testdir $hostname $serverPort $java";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JSSE_SSLClient $testdir $serverPort $hostname JSS";
+$serverCommand = "$run_shell ./startJssSelfServ.$scriptext $classpath $testdir $hostname $serverPort $java";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JSSE_SSLClient $testdir $serverPort $hostname JSS";
 # To be restored when bug 1321594 is fixed
 #run_ssl_test($testname, $serverCommand, $command);
 
 
 $serverPort = checkPort($serverPort);
 $testname = "SSL Ciphersuite JSSE Server using default provider and JSS client";
-$serverCommand = "$run_shell ./startJsseServ.$scriptext $jss_classpath $serverPort false $testdir rsa.pfx default $configfile $pwfile $java";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort  verboseoff JSSE";
+$serverCommand = "$run_shell ./startJsseServ.$scriptext $classpath $serverPort false $testdir rsa.pfx default $configfile $pwfile $java";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort  verboseoff JSSE";
 # To be restored when bug 1321594 is fixed
 #run_ssl_test($testname, $serverCommand, $command);
 
@@ -571,21 +600,21 @@ if ($java =~ /1.4/i || $osname =~ /HP/ || ( ($osname =~ /Linux/)  && $java =~ /1
 #with JSS is being build with JDK 1.5 add the Sunpkcs11-NSS support back in!
 #$serverPort = checkPort($serverPort);
 #$testname = "SSL Ciphersuite JSSE Server using Sunpkcs11-NSS provider and JSS client";
-#$serverCommand = "./startJsseServ.$scriptext $jss_classpath $serverPort false $testdir rsa.pfx Sunpkcs11 $configfile $pwfile $java";
-#$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort  verboseoff JSSE";
+#$serverCommand = "./startJsseServ.$scriptext $classpath $serverPort false $testdir rsa.pfx Sunpkcs11 $configfile $pwfile $java";
+#$command = "$java -cp $classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort  verboseoff JSSE";
 #run_ssl_test($testname, $serverCommand, $command);
 
 #$serverPort = checkPort($serverPort);
 #$testname = "SSL Ciphersuite JSSE Server using Sunpkcs11-NSS provider and JSS client";
-#$serverCommand = "./startJsseServ.$scriptext $jss_classpath $serverPort false $testdir rsa.pfx Sunpkcs11 $configfile $pwfile $java";
-#$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort verboseoff JSSE";
+#$serverCommand = "./startJsseServ.$scriptext $classpath $serverPort false $testdir rsa.pfx Sunpkcs11 $configfile $pwfile $java";
+#$command = "$java -cp $classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort verboseoff JSSE";
 #run_ssl_test($testname, $serverCommand, $command);
 
 #Mozilla-JSS only works with JDK 1.5 or higher when used as provider for SunJSSE
 $serverPort = checkPort($serverPort);
 $testname = "SSL Ciphersuite JSSE Server using Mozilla-JSS provider and JSS client";
-$serverCommand = "$run_shell ./startJsseServ.$scriptext $jss_classpath $serverPort false $testdir rsa.pfx Mozilla-JSS $configfile $pwfile $java";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort verboseoff Mozilla-JSS";
+$serverCommand = "$run_shell ./startJsseServ.$scriptext $classpath $serverPort false $testdir rsa.pfx Mozilla-JSS $configfile $pwfile $java";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort verboseoff Mozilla-JSS";
 # To be restored when bug 1321594 is fixed
 #run_ssl_test($testname, $serverCommand, $command);
 
@@ -597,67 +626,67 @@ $command = "$java -cp $jss_classpath org.mozilla.jss.tests.JSS_SelfServClient 2 
 #
 
 $testname = "Enable FipsMODE";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.FipsTest $testdir enable";
+$command = "$java -cp $classpath org.mozilla.jss.tests.FipsTest $testdir enable";
 run_test($testname, $command);
 
 $testname = "check FipsMODE";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.FipsTest $testdir chkfips";
+$command = "$java -cp $classpath org.mozilla.jss.tests.FipsTest $testdir chkfips";
 run_test($testname, $command);
 
 updateCertSN();
 $testname = "SSLClientAuth FIPSMODE";
 $serverPort = checkPort(++$serverPort);
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.SSLClientAuth $testdir $pwfile $serverPort $certSN";
+$command = "$java -cp $classpath org.mozilla.jss.tests.SSLClientAuth $testdir $pwfile $serverPort $certSN";
 run_test($testname, $command);
 
 $testname = "HMAC FIPSMODE";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.HMACTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.HMACTest $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "KeyWrapping FIPSMODE";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JCAKeyWrap $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JCAKeyWrap $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "Mozilla-JSS JCA Signature FIPSMODE";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JCASigTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JCASigTest $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "JSS Signature test FipsMODE";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.SigTest $testdir $pwfile";
+$command = "$java -cp $classpath org.mozilla.jss.tests.SigTest $testdir $pwfile";
 run_test($testname, $command);
 
 $serverPort = checkPort($serverPort);
 $testname = "SSL Ciphersuite FIPSMODE JSS Server and JSS client both";
-$serverCommand = "$run_shell ./startJssSelfServ.$scriptext $jss_classpath $testdir $hostname $serverPort  $java";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort  verboseoff JSS";
+$serverCommand = "$run_shell ./startJssSelfServ.$scriptext $classpath $testdir $hostname $serverPort  $java";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $testdir $pwfile $hostname $serverPort  verboseoff JSS";
 # To be restored when bug 1321594 is fixed
 #run_ssl_test($testname, $serverCommand, $command);
 
 $testname = "Disable FipsMODE";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.FipsTest $testdir disable";
+$command = "$java -cp $classpath org.mozilla.jss.tests.FipsTest $testdir disable";
 run_test($testname, $command);
 
 #
 # Test for JSS jar and library revision
 #
 $testname = "Check JSS jar version";
-$command = "$java -cp $jss_classpath org.mozilla.jss.tests.JSSPackageTest $testdir";
+$command = "$java -cp $classpath org.mozilla.jss.tests.JSSPackageTest $testdir";
 run_test($testname, $command);
 
 my $LIB = "$lib_jss"."4"."$lib_suffix";
 my $strings_exist = `which strings`;
 chomp($strings_exist);
 if ($strings_exist ne "") {
-    (-f "$nss_lib_dir/$LIB") or die "$nss_lib_dir/$LIB does not exist\n";
-    my $jsslibver = `strings $nss_lib_dir/$LIB | grep Header`;
+    (-f "$jss_lib_dir/$LIB") or die "$jss_lib_dir/$LIB does not exist\n";
+    my $jsslibver = `strings $jss_lib_dir/$LIB | grep Header`;
     chomp($jsslibver);
     if ($jsslibver ne "") {
         print "$LIB = $jsslibver\n";
     } else {
-        print "Could not fetch Header information from $nss_lib_dir/$LIB\n";
+        print "Could not fetch Header information from $jss_lib_dir/$LIB\n";
     }
 } else {
-    print "Could not fetch Header information from $nss_lib_dir/$LIB\n";
+    print "Could not fetch Header information from $jss_lib_dir/$LIB\n";
     $result=1;
 }
 

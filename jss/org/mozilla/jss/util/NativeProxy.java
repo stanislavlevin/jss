@@ -4,10 +4,12 @@
 
 package org.mozilla.jss.util;
 
-import org.mozilla.jss.util.*;
+import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Random;
-import java.util.Enumeration;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * NativeProxy, a superclass for Java classes that mirror C data structures.
@@ -16,17 +18,11 @@ import java.util.Enumeration;
  * freed properly.
  *
  * @author nicolson
- * @version $Revision$ $Date$ 
+ * @version $Revision$ $Date$
  */
 public abstract class NativeProxy
 {
-
-    /**
-     * Default constructor. Should not be called.
-     */
-    private NativeProxy() {
-        Assert._assert(false);
-    }
+    public static Logger logger = LoggerFactory.getLogger(NativeProxy.class);
 
     /**
      * Create a NativeProxy from a byte array representing a C pointer.
@@ -39,9 +35,7 @@ public abstract class NativeProxy
      */
     public NativeProxy(byte[] pointer) {
 		Assert._assert(pointer!=null);
-        if(Debug.DEBUG) {
-            registryIndex = register();
-        }
+        registryIndex = register();
         mPointer = pointer;
     }
 
@@ -95,9 +89,7 @@ public abstract class NativeProxy
      * }
      */
     protected void finalize() throws Throwable {
-        if(Debug.DEBUG) {
-            unregister(registryIndex);
-        }
+        unregister(registryIndex);
         releaseNativeResources();
     }
 
@@ -108,8 +100,8 @@ public abstract class NativeProxy
 
     /**
      * <p><b>Native Proxy Registry</b>
-     * <p>In debug mode, we keep track of all NativeProxy objects in a 
-     * static registry.  Whenever a NativeProxy is constructed, it 
+     * <p>In debug mode, we keep track of all NativeProxy objects in a
+     * static registry.  Whenever a NativeProxy is constructed, it
      * registers.  Whenever it finalizes, it unregisters.  At the end of
      * the game, we should be able to garbage collect and then assert that
      * the registry is empty. This could be done, for example, in the
@@ -119,11 +111,11 @@ public abstract class NativeProxy
      * releaseNativeResources() gets called.
      */
     private long registryIndex;
-    static Hashtable registry;
+    static Hashtable<Long, Long> registry;
     static Random indexGenerator;
 
     static {
-        registry = new Hashtable();
+        registry = new Hashtable<>();
         indexGenerator = new Random();
     }
 
@@ -154,7 +146,7 @@ public abstract class NativeProxy
         Long Lindex = new Long(index);
         Long element;
 
-        element = (Long) registry.remove(Lindex);
+        element = registry.remove(Lindex);
         Assert._assert(element != null);
     }
 
@@ -162,7 +154,7 @@ public abstract class NativeProxy
      * @return A list of the indices in the registry. Each element is a Long.
      * @see NativeProxy#getRegistryIndex
      */
-    public synchronized static Enumeration getRegistryIndices() {
+    public synchronized static Enumeration<Long> getRegistryIndices() {
         return registry.keys();
     }
 
@@ -181,14 +173,10 @@ public abstract class NativeProxy
      * is thrown.
      */
     public synchronized static void assertRegistryEmpty() {
-        if( Debug.DEBUG ) {
 			if(! registry.isEmpty()) {
-				Debug.trace(Debug.VERBOSE, "Warning: "+
-					String.valueOf(registry.size())+
-            		" NativeProxys are still registered.");
+			    logger.warn(registry.size() + " NativeProxys are still registered.");
 			} else {
-        		Debug.trace(Debug.OBNOXIOUS, "NativeProxy registry is empty");
+			    logger.debug("NativeProxy registry is empty");
 			}
-		}
     }
 }

@@ -12,13 +12,15 @@ import java.io.InputStream;
  */
 public class ENUMERATED extends INTEGER implements ASN1Value {
 
+    private static final long serialVersionUID = 1L;
     public static final Tag TAG = new Tag(Tag.Class.UNIVERSAL, 10);
     public Tag getTag() {
         return TAG;
     }
 
     /**
-     * Creates a new ENUMERATED value from a long.
+     * Creates a new ENUMERATED value from a long int.
+     * @param val Input value.
      */
     public ENUMERATED( long val ) {
         super( val );
@@ -29,7 +31,7 @@ public class ENUMERATED extends INTEGER implements ASN1Value {
     }
 
     /**
-     * Returns the value as a long.
+     * @return The value as a long int.
      */
     public long getValue() {
         return longValue();

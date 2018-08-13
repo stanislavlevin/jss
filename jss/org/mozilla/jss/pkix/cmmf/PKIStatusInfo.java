@@ -4,12 +4,19 @@
 
 package org.mozilla.jss.pkix.cmmf;
 
-import org.mozilla.jss.util.Assert;
-import org.mozilla.jss.asn1.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.BitSet;
+
+import org.mozilla.jss.asn1.ASN1Template;
+import org.mozilla.jss.asn1.ASN1Value;
+import org.mozilla.jss.asn1.BIT_STRING;
+import org.mozilla.jss.asn1.INTEGER;
+import org.mozilla.jss.asn1.InvalidBERException;
+import org.mozilla.jss.asn1.SEQUENCE;
+import org.mozilla.jss.asn1.Tag;
+import org.mozilla.jss.asn1.UTF8String;
 
 public class PKIStatusInfo implements ASN1Value {
 
@@ -39,8 +46,6 @@ public class PKIStatusInfo implements ASN1Value {
     public static final int wrongAuthority = 0x02000000;
     public static final int incorrectData = 0x01000000;
     public static final int missingTimeStamp = 0x00800000;
-
-    private PKIStatusInfo() { }
 
     /**
      * @param status A PKIStatus constant.
@@ -78,7 +83,7 @@ public class PKIStatusInfo implements ASN1Value {
       try {
         statusString.addElement( new UTF8String(s) );
       } catch( java.io.CharConversionException e ) {
-        Assert.notReached("Error encoding to UTF8");
+          throw new RuntimeException("Error encoding to UTF8: " + e.getMessage(), e);
       }
     }
 

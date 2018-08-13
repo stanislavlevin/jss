@@ -3,10 +3,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss.asn1;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.ByteArrayOutputStream;
+
 import org.mozilla.jss.util.Assert;
 
 /**
@@ -19,8 +20,6 @@ public class EXPLICIT implements ASN1Value {
     private ASN1Value content;
     private Tag tag;
 
-    private EXPLICIT() { }
-
     /**
      * Creates an EXPLICIT tag wrapping some other ASN1Value.  For example,
      * for the following ASN.1 snippet:
@@ -32,6 +31,8 @@ public class EXPLICIT implements ASN1Value {
      * <pre>
      *  EXPLICIT myValue = new EXPLICIT( new Tag(3), new INTEGER(5) );
      * </pre>
+     * @param tag Tag.
+     * @param content Content.
      */
     public EXPLICIT( Tag tag, ASN1Value content ) {
         Assert._assert(tag!=null && content!=null);
@@ -40,7 +41,7 @@ public class EXPLICIT implements ASN1Value {
     }
 
     /**
-     * Returns the ASN1Value that is wrapped by this EXPLICIT tag.
+     * @return the ASN1Value that is wrapped by this EXPLICIT tag.
      */
     public ASN1Value getContent() {
         return content;
@@ -81,8 +82,6 @@ public static class Template implements ASN1Template {
     private ASN1Template content;
     private Tag tag;
 
-    private Template() { }
-
     /**
      * Creates a template for unwrapping an object wrapped in an explicit tag.
      * For example, to decode:
@@ -120,7 +119,7 @@ public static class Template implements ASN1Template {
       try {
         ASN1Header head = new ASN1Header(istream);
 
-        head.validate( implicitTag, FORM.CONSTRUCTED );
+        head.validate( implicitTag, Form.CONSTRUCTED );
 
         ASN1Value val = content.decode(istream);
 

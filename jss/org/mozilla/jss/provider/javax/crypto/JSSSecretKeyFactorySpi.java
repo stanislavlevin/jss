@@ -4,24 +4,42 @@
 
 package org.mozilla.jss.provider.javax.crypto;
 
-import javax.crypto.*;
-import javax.crypto.spec.*;
 import java.io.CharConversionException;
-import java.security.*;
-import java.security.spec.*;
-import org.mozilla.jss.crypto.*;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
+
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.SecretKeyFactorySpi;
+import javax.crypto.spec.DESKeySpec;
+import javax.crypto.spec.DESedeKeySpec;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
+
 import org.mozilla.jss.CryptoManager;
-import org.mozilla.jss.util.Assert;
-import org.mozilla.jss.util.Password;
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.crypto.EncryptionAlgorithm;
+import org.mozilla.jss.crypto.KeyGenAlgorithm;
+import org.mozilla.jss.crypto.KeyWrapAlgorithm;
+import org.mozilla.jss.crypto.KeyWrapper;
+import org.mozilla.jss.crypto.PBEAlgorithm;
 import org.mozilla.jss.crypto.PBEKeyGenParams;
-import java.lang.reflect.*;
+import org.mozilla.jss.crypto.SecretKeyFacade;
+import org.mozilla.jss.crypto.SymmetricKey;
+import org.mozilla.jss.crypto.TokenException;
+import org.mozilla.jss.crypto.TokenRuntimeException;
+import org.mozilla.jss.crypto.TokenSupplierManager;
+import org.mozilla.jss.util.Password;
 
 class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
 
     private KeyGenAlgorithm alg = null;
     private CryptoToken token = null;
-
-    private JSSSecretKeyFactorySpi() { }
 
     protected JSSSecretKeyFactorySpi(KeyGenAlgorithm alg) {
         this.alg = alg;
@@ -57,7 +75,7 @@ class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
         // PBEKeySpec, we can get the information. The only way I know of
         // to find this out at runtime and be compatible with both
         // versions is to use the reflection API.
-        Class specClass = spec.getClass();
+        Class<?> specClass = spec.getClass();
         try {
             Method getSaltMethod = specClass.getMethod("getSalt",
                                        (java.lang.Class[]) null);
@@ -67,14 +85,14 @@ class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
 
             byte[] salt = (byte[]) getSaltMethod.invoke(spec,
                                        (java.lang.Object[]) null);
-            
+
             Integer itCountObj =
                 (Integer) getIterationMethod.invoke(spec,
                                                     (java.lang.Object[]) null);
             int iterationCount = itCountObj.intValue();
 
             Password pass = new Password(spec.getPassword());
-            
+
             PBEKeyGenParams params =
                 new PBEKeyGenParams(pass, salt, iterationCount);
             pass.clear();
@@ -113,7 +131,7 @@ class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
       try {
         if( spec instanceof PBEKeySpec ||
             spec instanceof PBEKeyGenParams) {
-            
+
             PBEKeyGenParams params;
             if( spec instanceof PBEKeySpec ) {
                 params = makePBEKeyGenParams((PBEKeySpec)spec);
@@ -144,7 +162,7 @@ class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
         } else if( spec instanceof SecretKeySpec ) {
             SecretKeySpec kspec = (SecretKeySpec) spec;
             SymmetricKey.Type type =
-                SymmetricKey.Type.fromName( kspec.getAlgorithm());   
+                SymmetricKey.Type.fromName( kspec.getAlgorithm());
             return generateKeyFromBits( kspec.getEncoded(), type);
         } else {
             throw new InvalidKeySpecException(
@@ -155,20 +173,19 @@ class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
       } catch(InvalidAlgorithmParameterException iape) {
             throw new InvalidKeySpecException(
                 "InvalidAlgorithmParameterException: " + iape.getMessage());
-      } catch(IllegalStateException ise) {
-            Assert.notReached("IllegalStateException");
-            throw new TokenRuntimeException("IllegalStateException: " +
-                ise.getMessage());
-      } catch(CharConversionException cce) {
+      } catch(IllegalStateException e) {
+            throw (TokenRuntimeException) new TokenRuntimeException("IllegalStateException: " +
+                e.getMessage()).initCause(e);
+      } catch(CharConversionException e) {
             throw new InvalidKeySpecException("CharConversionException: " +
-                cce.getMessage());
-      } catch(NoSuchAlgorithmException nsae) {
+                e.getMessage(), e);
+      } catch(NoSuchAlgorithmException e) {
             throw new InvalidKeySpecException("NoSuchAlgorithmException: " +
-                nsae.getMessage());
+                e.getMessage(), e);
       }
     }
 
-    public KeySpec engineGetKeySpec(SecretKey key, Class keySpec)
+    public KeySpec engineGetKeySpec(SecretKey key, Class<?> keySpec)
             throws InvalidKeySpecException
     {
       try {
@@ -196,14 +213,13 @@ class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
             throw new InvalidKeySpecException(
                 "Unsupported key spec: " + keySpec.getName());
         }
-      } catch(SymmetricKey.NotExtractableException nee) {
-          throw new InvalidKeySpecException("key is not extractable");
-      } catch(InvalidKeyException ike) {
+      } catch(SymmetricKey.NotExtractableException e) {
+          throw new InvalidKeySpecException("Key is not extractable: " + e.getMessage(), e);
+      } catch(InvalidKeyException e) {
           // This gets thrown by the key spec constructor if there's something
           // wrong with the key bits. But since those key bits came from
           // a real key, this should never happen.
-          Assert.notReached("Invalid key: " + ike.getMessage());
-          throw new InvalidKeySpecException("Invalid key: " + ike.getMessage());
+          throw new InvalidKeySpecException("Invalid key: " + e.getMessage(), e);
       }
     }
 
@@ -304,7 +320,7 @@ class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
 
         // generate a PBE key the old-fashioned way
         keygen = tok.getKeyGenerator(PBEAlgorithm.PBE_SHA1_DES3_CBC);
-        PBEKeyGenParams jssKeySpec = 
+        PBEKeyGenParams jssKeySpec =
             new PBEKeyGenParams(pw, salt, iterationCount);
         keygen.initialize(jssKeySpec);
         symk = keygen.generate();
@@ -319,7 +335,7 @@ class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
         }
         System.out.println("generated PBE keys are the same");
 
-/* XXX JDK 1.4 ONLY 
+/* XXX JDK 1.4 ONLY
         // now try with a JDK 1.4 PBEKeySpec
         PBEKeySpec keySpec = new PBEKeySpec(pw, salt, iterationCount);
         newKey = (SecretKeyFacade) keyFact.generateSecret(keySpec);
@@ -328,7 +344,7 @@ class JSSSecretKeyFactorySpi extends SecretKeyFactorySpi {
         }
         System.out.println("generated PBE keys are the same");
 */
-        
+
         System.exit(0);
       } catch(Throwable t) {
             t.printStackTrace();

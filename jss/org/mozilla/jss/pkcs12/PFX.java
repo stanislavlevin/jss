@@ -4,17 +4,38 @@
 
 package org.mozilla.jss.pkcs12;
 
-import org.mozilla.jss.asn1.*;
-import org.mozilla.jss.pkcs7.*;
-import org.mozilla.jss.pkix.cert.*;
-import java.io.*;
-import org.mozilla.jss.util.Password;
+import java.io.BufferedInputStream;
+import java.io.CharConversionException;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.security.DigestException;
+
 import org.mozilla.jss.CryptoManager;
-import org.mozilla.jss.pkix.primitive.*;
-import org.mozilla.jss.pkix.primitive.Attribute;
-import org.mozilla.jss.crypto.*;
-import java.security.*;
+import org.mozilla.jss.NotInitializedException;
+import org.mozilla.jss.asn1.ANY;
+import org.mozilla.jss.asn1.ASN1Template;
+import org.mozilla.jss.asn1.ASN1Util;
+import org.mozilla.jss.asn1.ASN1Value;
+import org.mozilla.jss.asn1.BMPString;
+import org.mozilla.jss.asn1.INTEGER;
+import org.mozilla.jss.asn1.InvalidBERException;
+import org.mozilla.jss.asn1.OCTET_STRING;
+import org.mozilla.jss.asn1.SEQUENCE;
+import org.mozilla.jss.asn1.SET;
+import org.mozilla.jss.asn1.Tag;
+import org.mozilla.jss.crypto.JSSSecureRandom;
+import org.mozilla.jss.crypto.PBEAlgorithm;
+import org.mozilla.jss.crypto.TokenException;
+import org.mozilla.jss.pkcs7.ContentInfo;
+import org.mozilla.jss.pkcs7.DigestInfo;
 import org.mozilla.jss.pkix.cert.Certificate;
+import org.mozilla.jss.pkix.primitive.Attribute;
+import org.mozilla.jss.pkix.primitive.EncryptedPrivateKeyInfo;
+import org.mozilla.jss.pkix.primitive.PrivateKeyInfo;
+import org.mozilla.jss.util.Password;
 
 /**
  * The top level ASN.1 structure for a PKCS #12 blob.
@@ -107,7 +128,7 @@ public class PFX implements ASN1Value {
      *      this PFX does not contain a MacData, returns false.
      */
     public boolean verifyAuthSafes(Password password, StringBuffer reason)
-        throws CryptoManager.NotInitializedException
+        throws NotInitializedException
     {
       try {
 
@@ -159,7 +180,6 @@ public class PFX implements ASN1Value {
     ///////////////////////////////////////////////////////////////////////
     // Constructors
     ///////////////////////////////////////////////////////////////////////
-    private PFX() { }
 
     /**
      * Creates a PFX with the given parameters.
@@ -195,7 +215,7 @@ public class PFX implements ASN1Value {
      * Computes the macData field and adds it to the PFX. The macData field
      *   is a Message Authentication Code of the AuthenticatedSafes, and
      *   is used to prove the authenticity of the PFX.
-     * 
+     *
      * @param password The password to be used to create the password-based MAC.
      * @param salt The salt to be used.  If null is passed in, a new salt
      *      will be created from a random source.
@@ -204,7 +224,7 @@ public class PFX implements ASN1Value {
      */
     public void computeMacData(Password password,
             byte[] salt, int iterationCount)
-        throws CryptoManager.NotInitializedException, DigestException,
+        throws NotInitializedException, DigestException,
         TokenException, CharConversionException
     {
         macData = new MacData( password, salt, iterationCount,
@@ -305,14 +325,20 @@ public class PFX implements ASN1Value {
                 System.out.println("Usage: PFX <dbdir> <infile>");
                 System.exit(-1);
             }
-            FileInputStream fis = new FileInputStream(args[1]);
+
             int certfile = 0;
 
             CryptoManager.initialize( args[0] );
 
             // Decode the P12 file
             PFX.Template pfxt = new PFX.Template();
-            PFX pfx = (PFX) pfxt.decode(new BufferedInputStream(fis, 2048));
+            PFX pfx;
+
+            FileInputStream fis = new FileInputStream(args[1]);
+            try (BufferedInputStream in = new BufferedInputStream(fis, 2048)) {
+                pfx = (PFX) pfxt.decode(in);
+            }
+
             System.out.println("Decoded PFX");
 
             // now peruse it for interesting info
@@ -423,8 +449,8 @@ public class PFX implements ASN1Value {
                 // Add the new safe contents to the authsafes
                 if( authSafes.safeContentsIsEncrypted(i) ) {
                     newAuthSafes.addEncryptedSafeContents(
-                        authSafes.DEFAULT_KEY_GEN_ALG, newPass,
-                        null, authSafes.DEFAULT_ITERATIONS, safeContents);
+                        AuthenticatedSafes.DEFAULT_KEY_GEN_ALG, newPass,
+                        null, AuthenticatedSafes.DEFAULT_ITERATIONS, safeContents);
                 } else {
                     newAuthSafes.addSafeContents( safeContents );
                 }
@@ -438,7 +464,7 @@ public class PFX implements ASN1Value {
             newPfx.encode(fos);
             fos.close();
 
-            
+
         } catch( Exception e ) {
             e.printStackTrace();
         }

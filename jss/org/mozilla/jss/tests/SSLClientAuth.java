@@ -5,6 +5,8 @@ package org.mozilla.jss.tests;
 
 import java.security.cert.CertificateEncodingException;
 import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.NicknameConflictException;
+import org.mozilla.jss.UserCertConflictException;
 import org.mozilla.jss.ssl.*;
 import org.mozilla.jss.crypto.*;
 import org.mozilla.jss.asn1.*;
@@ -169,7 +171,7 @@ public class SSLClientAuth implements Runnable {
     private void generateCerts(CryptoManager cm, int serialNum) {
         
         // RSA Key with default exponent
-        int keyLength = 1024;
+        int keyLength = 2048;
         try {
             java.security.KeyPairGenerator kpg =
                     java.security.KeyPairGenerator.getInstance("RSA",
@@ -215,10 +217,10 @@ public class SSLClientAuth implements Runnable {
         } catch (NoSuchProviderException ex) {
             ex.printStackTrace();
             System.exit(1);
-        } catch (CryptoManager.NicknameConflictException ex) {
+        } catch (NicknameConflictException ex) {
             ex.printStackTrace();
             System.exit(1);
-        } catch (CryptoManager.UserCertConflictException ex) {
+        } catch (UserCertConflictException ex) {
             ex.printStackTrace();
             System.exit(1);
         } catch (TokenException ex) {

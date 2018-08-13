@@ -3,11 +3,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss.asn1;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.InputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.math.BigInteger;
 import java.util.Random;
 
@@ -16,6 +16,7 @@ import java.util.Random;
  */
 public class INTEGER extends BigInteger implements ASN1Value {
 
+    private static final long serialVersionUID = 1L;
     private byte[] encodedContents = null;
     private byte[] getEncodedContents() {
         if( encodedContents == null ) {
@@ -59,7 +60,7 @@ public class INTEGER extends BigInteger implements ASN1Value {
     public INTEGER(BigInteger bi) {
         super( bi.toByteArray() );
     }
-        
+
     public static final Tag TAG = new Tag(Tag.Class.UNIVERSAL, 2);
     public Tag getTag() {
         return TAG;
@@ -98,6 +99,7 @@ public class INTEGER extends BigInteger implements ASN1Value {
 
     /**
      * Tests the DER encoding and decoding of the INTEGER class.
+     * @param args Arguments.
      */
     public static void main(String args[]) {
         try {

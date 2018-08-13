@@ -2,7 +2,6 @@ package org.mozilla.jss.pkcs11;
 
 import org.mozilla.jss.crypto.PrivateKey;
 import org.mozilla.jss.crypto.TokenException;
-import org.mozilla.jss.util.Assert;
 import java.math.BigInteger;
 import java.security.interfaces.DSAParams;
 import java.security.interfaces.DSAPrivateKey;
@@ -10,6 +9,8 @@ import java.security.interfaces.DSAPrivateKey;
 class PK11DSAPrivateKey
     extends PK11PrivKey implements DSAPrivateKey
 {
+
+    private static final long serialVersionUID = 1L;
 
     private PK11DSAPrivateKey() { super(null); }
 

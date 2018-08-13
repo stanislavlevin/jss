@@ -10,10 +10,11 @@ package org.mozilla.jss.util;
  * VM to halt and print a stack trace.
  *
  * @see org.mozilla.jss.util.Assert
- * @see org.mozilla.jss.util.Debug
  * @version $Revision$ $Date$
  */
 public class AssertionException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
     public AssertionException() {}
 
     public AssertionException(String msg) {

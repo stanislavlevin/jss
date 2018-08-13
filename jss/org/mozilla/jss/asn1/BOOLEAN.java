@@ -3,9 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss.asn1;
 
-import java.io.OutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 /**
  * An ASN.1 <code>BOOLEAN</code> value.
@@ -17,10 +17,6 @@ public class BOOLEAN implements ASN1Value {
 
     public Tag getTag() {
         return TAG;
-    }
-
-    private ASN1Header getHeader() {
-        return getHeader(TAG);
     }
 
     private ASN1Header getHeader(Tag implicitTag) {
@@ -42,18 +38,17 @@ public class BOOLEAN implements ASN1Value {
         }
     }
 
-    private BOOLEAN() { }
-
     private boolean val;
     /**
      * Creates a <code>BOOLEAN</code> with the given value.
+     * @param val Boolean value.
      */
     public BOOLEAN(boolean val) {
         this.val = val;
     }
 
     /**
-     * Returns the boolean value of this <code>BOOLEAN</code>.
+     * @return The boolean value of this <code>BOOLEAN</code>.
      */
     public boolean toBoolean() {
         return val;

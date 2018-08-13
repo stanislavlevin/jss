@@ -3,14 +3,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss.pkcs11;
 
-import org.mozilla.jss.util.Assert;
 import java.util.Enumeration;
 import java.util.Vector;
+
+import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.util.Assert;
 
 public final class PK11Module {
 
     private PK11Module() {
-        Assert.notReached("PK11Module default constructor");
+        throw new RuntimeException("PK11Module default constructor");
     }
 
     /**
@@ -37,7 +39,7 @@ public final class PK11Module {
      *
      * @return An enumeration of CryptoTokens that come from this module.
      */
-    public synchronized Enumeration getTokens() {
+    public synchronized Enumeration<CryptoToken> getTokens() {
         return tokenVector.elements();
     }
 
@@ -46,12 +48,12 @@ public final class PK11Module {
      * to JSS.
      */
     public synchronized void reloadTokens() {
-        tokenVector = new Vector();
+        tokenVector = new Vector<>();
         putTokensInVector(tokenVector);
     }
 
-    private native void putTokensInVector(Vector tokens);
+    private native void putTokensInVector(Vector<CryptoToken> tokens);
 
-    private Vector tokenVector;
+    private Vector<CryptoToken> tokenVector;
     private ModuleProxy moduleProxy;
 }

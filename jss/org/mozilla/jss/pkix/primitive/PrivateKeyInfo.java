@@ -4,14 +4,25 @@
 
 package org.mozilla.jss.pkix.primitive;
 
-import org.mozilla.jss.asn1.*;
-import java.io.*;
-import org.mozilla.jss.crypto.PrivateKey;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.security.NoSuchAlgorithmException;
+
+import org.mozilla.jss.asn1.ASN1Template;
+import org.mozilla.jss.asn1.ASN1Value;
+import org.mozilla.jss.asn1.INTEGER;
+import org.mozilla.jss.asn1.InvalidBERException;
+import org.mozilla.jss.asn1.OCTET_STRING;
+import org.mozilla.jss.asn1.SEQUENCE;
+import org.mozilla.jss.asn1.SET;
+import org.mozilla.jss.asn1.Tag;
+import org.mozilla.jss.crypto.PrivateKey;
 
 public class PrivateKeyInfo
     implements ASN1Value, java.security.PrivateKey {
 
+    private static final long serialVersionUID = 1L;
     ///////////////////////////////////////////////////////////////////////
     // members and member access
     ///////////////////////////////////////////////////////////////////////
@@ -60,8 +71,6 @@ public class PrivateKeyInfo
     ///////////////////////////////////////////////////////////////////////
     // Constructors
     ///////////////////////////////////////////////////////////////////////
-
-    private PrivateKeyInfo() { }
 
     /**
      * Create a PrivateKeyInfo from its components.

@@ -9,7 +9,6 @@
 
 package org.mozilla.jss.ssl;
 
-import java.io.*;
 import java.net.*;
 import java.util.*;
 
@@ -23,6 +22,8 @@ import java.util.*;
  * operation is complete.
  */
 public class SSLHandshakeCompletedEvent extends EventObject {
+    private static final long serialVersionUID = 1L;
+
     public SSLHandshakeCompletedEvent(SSLSocket socket) {
 	super(socket);
     }

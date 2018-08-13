@@ -38,12 +38,11 @@ package org.mozilla.jss.tests;
 
 import org.mozilla.jss.crypto.*;
 import org.mozilla.jss.CryptoManager;
-import org.mozilla.jss.util.Assert;
-import org.mozilla.jss.pkcs11.*;
+import org.mozilla.jss.InitializationValues;
+
 import sun.security.pkcs11.wrapper.PKCS11Constants;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Vector;
 import java.util.Enumeration;
 
 /**
@@ -73,8 +72,8 @@ public class SymKeyDeriving {
       SymmetricKey macKeyDev = null;
       try {
 
-        CryptoManager.InitializationValues vals =
-              new CryptoManager.InitializationValues("./"
+        InitializationValues vals =
+              new InitializationValues("./"
               );
         CryptoManager.initialize(vals);
         CryptoManager cm = CryptoManager.getInstance();

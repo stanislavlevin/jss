@@ -4,7 +4,6 @@
 
 package org.mozilla.jss.pkcs11;
 
-import org.mozilla.jss.util.Assert;
 // Requires JAVA 1.5
 //import java.security.interfaces.ECPublicKey;
 import java.math.BigInteger;
@@ -13,7 +12,8 @@ import java.math.BigInteger;
 // Requires JAVA 1.5
 //public final class PK11ECPublicKey extends PK11PubKey implements ECPublicKey {
 public final class PK11ECPublicKey extends PK11PubKey {
-    
+
+    private static final long serialVersionUID = 1L;
     public PK11ECPublicKey(byte[] pointer) {
         super(pointer);
     }
@@ -24,8 +24,7 @@ public final class PK11ECPublicKey extends PK11PubKey {
 //      try {
 //        return new BigInteger( getCurveByteArray() );
 //      } catch(NumberFormatException e) {
-//       Assert.notReached("Unable to decode DSA parameters");
-//       return null;
+//          throw new RuntimeException("Unable to decode DSA parameters: " + e.getMessage(), e);
 //      }
 //    }
 //
@@ -34,8 +33,7 @@ public final class PK11ECPublicKey extends PK11PubKey {
       try {
         return new BigInteger( getCurveByteArray() );
       } catch(NumberFormatException e) {
-       Assert.notReached("Unable to decode EC curve");
-       return null;
+          throw new RuntimeException("Unable to decode EC curve: " + e.getMessage(), e);
       }
     }
 
@@ -47,8 +45,7 @@ public final class PK11ECPublicKey extends PK11PubKey {
       try {
         return new BigInteger( getWByteArray() );
       } catch(NumberFormatException e) {
-        Assert.notReached("Unable to decode EC public value");
-        return null;
+          throw new RuntimeException("Unable to decode EC public value: " + e.getMessage(), e);
       }
     }
 
