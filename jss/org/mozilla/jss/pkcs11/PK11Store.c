@@ -6,7 +6,7 @@
 
 #include <plarena.h>
 #include <nspr.h>
-#include <key.h>
+#include <keyhi.h>
 #include <secmod.h>
 #include <pk11func.h>
 #include <cert.h>
@@ -650,6 +650,7 @@ Java_org_mozilla_jss_pkcs11_PK11Store_getEncryptedPrivateKeyInfo(
     SECItem epkiItem;
     epkiItem.data = NULL;
     epkiItem.len = 0;
+    jbyteArray encodedEpki = NULL;
 
     PR_ASSERT(env != NULL && this != NULL);
 
@@ -709,7 +710,7 @@ Java_org_mozilla_jss_pkcs11_PK11Store_getEncryptedPrivateKeyInfo(
     }
 
     // convert to Java byte array
-    jbyteArray encodedEpki = JSS_SECItemToByteArray(env, &epkiItem);
+    encodedEpki = JSS_SECItemToByteArray(env, &epkiItem);
 
 finish:
     if (epki != NULL) {
@@ -838,7 +839,7 @@ Java_org_mozilla_jss_pkcs11_PK11Store_importEncryptedPrivateKeyInfo(
         goto finish;
     }
     SECItem nickItem;
-    nickItem.data = nicknameChars;
+    nickItem.data = (unsigned char *) nicknameChars;
     nickItem.len = (*env)->GetStringUTFLength(env, nickname);
 
     // if keyUsage = 0, defaults to signing and encryption/key agreement.

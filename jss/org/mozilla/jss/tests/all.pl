@@ -3,22 +3,30 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use strict;
+use warnings;
+use warnings FATAL => 'all';
+
 use Socket;
 use File::Basename;
-use Cwd;
-use Cwd 'abs_path';
+use Cwd qw(abs_path);
 use POSIX 'uname';
 
-                                                                                                  
+# change the line below if we reorganize the code; must
+# point to the location with Common.pm
+use lib dirname(dirname abs_path $0) . '/../../../lib';
+
+use Common qw(get_jar_files);
+
 # dist <dist_dir> <NSS bin dir> <NSS lib dir> <JSS lib dir>
 # release <java release dir> <nss release dir> <nspr release dir>
 # auto   (test the current build directory)
 
 sub usage {
     print "Usage:\n";
-    print "$0 dist <dist_dir> <NSS bin_dir> <NSS lib dir> <JSS lib dir>\n";
+    print "$0 dist <dist_dir> <NSS bin_dir> <NSS lib dir> <JSS lib dir> <jss jar>\n";
     print "$0 release <jss release dir> <nss release dir> "
-        . "<nspr release dir>\n";
+        . "<nspr release dir> <jss jar>\n";
     print "$0 auto\n";
     exit(1);
 }
@@ -29,6 +37,7 @@ $| = 1;
 
 # Global variables
 my $java           = "";
+my $java_version   = "";
 my $testdir        = "";
 my $testrun        = 0;
 my $testpass       = 0;
@@ -42,24 +51,28 @@ my $lib_jss        = "libjss";
 my $jss_rel_dir    = "";
 my $jss_classpath  = "";
 my $serverPort     = 2876;
-my $hostname       = localhost;
+my $localhost      = "localhost";
+my $hostname       = $localhost;
 my $dbPwd          = "m1oZilla";
 my $configfile     = "";
 my $keystore       = "";
 my $certSN_file    = "";
 my $certSN         = 0;
+my $osname         = "";
+my $host           = "";
+my $release        = "";
 ($osname,$host,$release)    = uname;
 
 # checkPort will return a free Port number
-# otherwise it will die after trying 10 times. 
+# otherwise it will die after trying 10 times.
 sub checkPort {
-   my ($p) = @_; 
+   my ($p) = @_;
    my $localhost = inet_aton("localhost");
    my $max = $p + 20; # try to find a port 10 times
    my $port = sockaddr_in($p, $localhost);
 
-   #create a socket 
-   socket(SOCKET, PF_INET, SOCK_STREAM, getprotobyname('tcp')) 
+   #create a socket
+   socket(SOCKET, PF_INET, SOCK_STREAM, getprotobyname('tcp'))
    || die "Unable to create socket: $!\n";
 
    #loop until you find a free port
@@ -69,13 +82,21 @@ sub checkPort {
          $port = sockaddr_in($p, $localhost);
    }
    close SOCKET || die "Unable to close socket: $!\n";
-   if ($p == $max) { 
+   if ($p == $max) {
       die "Unable to find a free port..\n";
    }
 
    return $p;
 }
 
+
+# used in all test invocations
+my $run_shell    = "";
+my $pwfile       = "";
+my $nss_bin_dir  = "";
+my $classpath    = "";
+my $ld_lib_path  = "";
+my $nspr_lib_dir = "";
 
 sub setup_vars {
     my $argv = shift;
@@ -89,7 +110,7 @@ sub setup_vars {
     } elsif( $osname =~ /Darwin/) {
         $ld_lib_path = "DYLD_LIBRARY_PATH";
         $lib_suffix = ".jnilib";
-    } elsif( $osname =~ /mingw/i ) { 
+    } elsif( $osname =~ /mingw/i ) {
     	print "We are mingw\n";
         $ld_lib_path = "PATH";
         $truncate_lib_path = 0;
@@ -99,7 +120,7 @@ sub setup_vars {
         $lib_jss    = "jss";
         $scriptext = "sh";
         $run_shell = "sh.exe";
-    } elsif( $osname =~ /win/i ) { 
+    } elsif( $osname =~ /win/i ) {
         $ld_lib_path = "PATH";
         $truncate_lib_path = 0;
         $pathsep = ";";
@@ -112,13 +133,12 @@ sub setup_vars {
         $scriptext = "sh";
     }
 
-    $ENV{CLASSPATH}  = "";
     $ENV{$ld_lib_path} = "" if $truncate_lib_path;
 
     if( $$argv[0] eq "dist" ) {
         shift @$argv;
 
-        if (scalar @$argv != 4) {
+        if (scalar @$argv != 5) {
             usage("incorrect dist parameters");
         }
 
@@ -126,13 +146,12 @@ sub setup_vars {
         $nss_bin_dir = shift @$argv;
         $nss_lib_dir = shift @$argv;
         $jss_lib_dir = shift @$argv;
+        $jss_classpath = shift @$argv;
 
         $jss_rel_dir   = "$dist_dir/classes/org";
-        $jss_classpath = "$dist_dir/xpclass.jar";
 
         ( -f $jss_classpath ) or die "$jss_classpath does not exist";
 
-        $ENV{CLASSPATH} .= "$jss_classpath";
         $ENV{$ld_lib_path} = $ENV{$ld_lib_path} . $pathsep . "$nss_lib_dir";
 
     } elsif( $$argv[0] eq "auto" ) {
@@ -151,7 +170,6 @@ sub setup_vars {
 
         ( -f $jss_classpath ) or die "$jss_classpath does not exist";
 
-        $ENV{CLASSPATH} .= "$jss_classpath";
         #$ENV{$ld_lib_path} = $ENV{$ld_lib_path} . $pathsep . "$nss_lib_dir";
         $ENV{$ld_lib_path} = "$nss_lib_dir";
 
@@ -161,14 +179,13 @@ sub setup_vars {
         $jss_rel_dir     = shift @$argv or usage();
         my $nss_rel_dir  = shift @$argv or usage();
         my $nspr_rel_dir = shift @$argv or usage();
+        $jss_classpath   = shift @$argv or usage();
 
         $nspr_lib_dir = "$nspr_rel_dir/lib";
         $nss_bin_dir = "$nss_rel_dir/bin";
         $nss_lib_dir = "$nss_rel_dir/lib";
         $jss_lib_dir = "$jss_rel_dir/lib";
-        $jss_classpath = "$jss_rel_dir/../xpclass.jar";
 
-        $ENV{CLASSPATH} .= "$jss_classpath";
         $ENV{$ld_lib_path} =
                 "$jss_lib_dir" . $pathsep .
                 "$nss_lib_dir" . $pathsep .
@@ -179,11 +196,11 @@ sub setup_vars {
         usage();
     }
 
-    if ($ENV{PORT_JSSE_SERVER}) {
+    if (defined $ENV{PORT_JSSE_SERVER} && $ENV{PORT_JSSE_SERVER}) {
        $serverPort = $ENV{PORT_JSSE_SERVER};
     }
 
-    if ($ENV{PORT_JSS_SERVER}) { 
+    if (defined $ENV{PORT_JSS_SERVER} && $ENV{PORT_JSS_SERVER}) {
        $serverPort = $ENV{PORT_JSS_SERVER};
     }
 
@@ -195,7 +212,7 @@ sub setup_vars {
     if ($osname =~ /Darwin/) {
         $java = "$ENV{JAVA_HOME}/bin/java";
     } else {
-        $java = "$ENV{JAVA_HOME}/jre/bin/java$exe_suffix";
+        $java = "$ENV{JAVA_HOME}/bin/java$exe_suffix";
     }
 
     #
@@ -219,16 +236,18 @@ sub setup_vars {
     }
 
     (-f $java) or die "'$java' does not exist\n";
-    $java = $java . $ENV{NATIVE_FLAG};
-
-    if ($ENV{USE_64} && !$java_64bit) {
-        $java = $java . " -d64";
-    }
 
     #MAC OS X have the -Djava.library.path for the JSS JNI library
     if ($osname =~ /Darwin/ || $osname =~ /Linux/) {
         $java = $java . " -Djava.library.path=$jss_lib_dir";
-    } 
+    }
+
+    # Check the java version
+    $java_version = `$java -version 2>&1`;
+
+    my $jarFiles = Common::get_jar_files;
+    $jarFiles = "$jarFiles:" . Common::detect_jar_file "slf4j-jdk14.jar", "slf4j/jdk14.jar";
+    $classpath = "$jarFiles:$jss_classpath";
 
     $pwfile = "passwords";
 
@@ -239,16 +258,19 @@ sub setup_vars {
     my $base_mozilla = $all_dir . "/../../../../..";
     my $abs_base_mozilla = abs_path($base_mozilla);
     # $result_dir = Directory where the results are (mozilla/tests_results/jss)
+    # First check the one above
     my $result_dir =  $abs_base_mozilla . "/tests_results";
     if (! -d $result_dir) {
        mkdir( $result_dir, 0755 ) or die;
     }
-    my $result_dir =  $abs_base_mozilla . "/tests_results/jss";
+    # Now the one for jss
+    $result_dir =  $abs_base_mozilla . "/tests_results/jss";
     if( ! -d $result_dir ) {
       mkdir( $result_dir, 0755 ) or die;
     }
     # $host = hostname
     # $version = test run number (first = 1). Stored in $result_dir/$host
+    my $version = "";
     my $version_file = $result_dir ."/" . $host;
     if ( -f $version_file) {
       open (VERSION, "< $version_file") || die "couldn't open " . $version_file . " for read";
@@ -266,9 +288,9 @@ sub setup_vars {
     # Finally, set $testdir
     $testdir = $result_dir . "/" . $host . "." . $version;
 
-    #in case multiple tests are being run on the same machine increase  
+    #in case multiple tests are being run on the same machine increase
     #the port numbers with version number * 10
-    
+
     $serverPort = $serverPort + ($version * 10);
 
     outputEnv();
@@ -299,33 +321,37 @@ sub outputEnv {
 
    print "*****ENVIRONMENT*****\n";
    print "java=$java\n";
-   print "NATIVE_FLAG=$ENV{NATIVE_FLAG}\n";
    print "$ld_lib_path=$ENV{$ld_lib_path}\n";
-   print "CLASSPATH=$ENV{CLASSPATH}\n";
-   print "BUILD_OPT=$ENV{BUILD_OPT}\n";
-   print "USE_64=$ENV{USE_64}\n";
+   print "CLASSPATH=$classpath\n";
+   if (defined $ENV{BUILD_OPT}) {
+      print "BUILD_OPT=$ENV{BUILD_OPT}\n";
+   }
+   if (defined $ENV{USE_64}) {
+      print "USE_64=$ENV{USE_64}\n";
+   }
    print "testdir=$testdir\n";
    print "serverPort=$serverPort\n";
    print "LIB_SUFFIX=$lib_suffix\n";
-   print "osname=$osname\n";  
+   print "osname=$osname\n";
    print "release=$release\n";
    print "which perl=";
    system ("which perl");
    system ("perl -version | grep \"This is perl\"");
    system ("$java -version");
 }
+
 sub createpkcs11_cfg {
-   
+
     $configfile = $testdir . "/" . "nsspkcs11.cfg";
     $keystore = $testdir . "/" . "keystore";
     if ( -f $configfile ) {
         print "configfile all ready exists";
        return;
-    } 
- 
+    }
+
     my $nsslibdir = $nss_lib_dir;
     my $tdir = $testdir;
-    
+
     #On windows make sure the path starts with c:
     if ($osname =~ /_NT/i) {
        substr($nsslibdir, 0, 2) = 'c:';
@@ -333,7 +359,7 @@ sub createpkcs11_cfg {
     }
     #the test for java 1.5 or 1.6 relies on the JAVA_HOME path to have the version
     #this is the case for all the build machines and tinderboxes.
-    if ( $java =~ /1.6/i) {
+    if ( $java_version =~ /1.6/i) {
        # java 6
        # http://java.sun.com/javase/6/docs/technotes/guides/security/p11guide.html
        # note some OS can read the 1.5 configuration but not all can.
@@ -345,7 +371,7 @@ sub createpkcs11_cfg {
        print CONFIG "nssModule=keystore\n";
        close (CONFIG);
 
-    } else { # default 
+    } else { # default
 
        # java 5
        #http://java.sun.com/j2se/1.5.0/docs/guide/security/p11guide.html
@@ -372,12 +398,12 @@ sub run_ssl_test {
 
     print "\n============= $testname \n";
     print "$serverCommand \n";
-    $result = system("$serverCommand");
+    my $result = system("$serverCommand");
     if ($result != 0) {
         print "launching server FAILED with return value $result\n";
         return;
     }
-    sleep 5;                                    
+    sleep 5;
     print "\nSSL Server is invoked using port $serverPort \n" ;
     print "$clientCommand \n";
     $result = system("$clientCommand");
@@ -394,7 +420,7 @@ sub run_test {
 
     print "\n============= $testname \n";
     print "$command \n";
-    $result = system("$command");
+    my $result = system("$command");
     $result >>=8;
     print_case_result ($result, $testname);
 }
@@ -426,7 +452,7 @@ if( ! -d $testdir ) {
     mkdir( $testdir, 0755 ) or die;
 }
 {
-    my @dbfiles = 
+    my @dbfiles =
         ("$testdir/cert8.db", "$testdir/key3.db", "$testdir/secmod.db", "$testdir/rsa.pfx");
     (grep{ -f } @dbfiles)  and die "There is already an old database in $testdir";
     my $result = system("cp $nss_lib_dir/*nssckbi* $testdir");
@@ -437,25 +463,18 @@ if( ! -d $testdir ) {
 print "creating pkcs11config file\n";
 createpkcs11_cfg;
 
-my $result;
-my $command;
 my $serverCommand;
 
-if( $ENV{DEBIAN_BUILD} ) {
-    $jarFiles = "/usr/share/java/slf4j-api.jar:/usr/share/java/slf4j-jdk14.jar:/usr/share/java/commons-lang.jar";
-} else {
-    $jarFiles = "/usr/share/java/slf4j/slf4j-api.jar:/usr/share/java/slf4j/slf4j-jdk14.jar:/usr/share/java/commons-lang.jar";
-}
-
-$classpath = "$jarFiles:$jss_classpath";
-
-$pk12util = "pk12util$exe_suffix";
+my $pk12util = "pk12util$exe_suffix";
 if ($nss_bin_dir) {
     $pk12util = "$nss_bin_dir/$pk12util";
 }
 
+my $testname = "";
+my $command  = "";
+
 $testname = "Test UTF-8 Converter";
-$command = "$java -cp $classpath org.mozilla.jss.tests.UTF8ConverterTest";
+$command = "$java -ea -cp $classpath org.mozilla.jss.tests.UTF8ConverterTest";
 run_test($testname, $command);
 
 $testname = "Setup DBs";
@@ -506,7 +525,7 @@ run_test($testname, $command);
 
 
 $testname = "Key Generation";
-$command = "$java -cp $classpath org.mozilla.jss.tests.TestKeyGen $testdir $pwfile";
+$command = "$java -ea -cp $classpath org.mozilla.jss.tests.TestKeyGen $testdir $pwfile";
 run_test($testname, $command);
 
 $testname = "Key Factory";
@@ -592,10 +611,10 @@ $command = "$java -cp $classpath org.mozilla.jss.tests.JSS_SelfServClient 2 -1 $
 #run_ssl_test($testname, $serverCommand, $command);
 
 
-if ($java =~ /1.4/i || $osname =~ /HP/ || ( ($osname =~ /Linux/)  && $java =~ /1.5/i && ($ENV{USE_64}) )) {
+if ($java_version =~ /1.4/i || $osname =~ /HP/ || ( ($osname =~ /Linux/)  && $java_version =~ /1.5/i && ($ENV{USE_64}) )) {
     print "don't run the SunJSSE with Mozilla-JSS provider with Java4 need java5 or higher";
     print "don't run the JSSE Server tests on HP or Linux  64 bit with java5.\n";
-    print "Java 5 on HP does not have SunPKCS11 class\n"; 
+    print "Java 5 on HP does not have SunPKCS11 class\n";
 } else {
 #with JSS is being build with JDK 1.5 add the Sunpkcs11-NSS support back in!
 #$serverPort = checkPort($serverPort);
@@ -666,6 +685,22 @@ $testname = "Disable FipsMODE";
 $command = "$java -cp $classpath org.mozilla.jss.tests.FipsTest $testdir disable";
 run_test($testname, $command);
 
+if ($java_version =~ /1.8/i) {
+    # Only run the PKCS11Constants test on JDK 8. Newer versions do not
+    # expose the interface we are testing against.
+    $testname = "Test PKCS11Constants.java for compatibility with Sun's interface";
+    $command = "$java -ea -cp $classpath org.mozilla.jss.tests.TestPKCS11Constants";
+    run_test($testname, $command);
+}
+
+$testname = "JSS DER Encoding of Enumeration regression test";
+$command = "$java -cp $classpath org.mozilla.jss.tests.EnumerationZeroTest";
+run_test($testname, $command);
+
+$testname = "JSS Test DER Encoding Functionality";
+$command = "$java -ea -cp $classpath org.mozilla.jss.tests.DEROutputStreamTests";
+run_test($testname, $command);
+
 #
 # Test for JSS jar and library revision
 #
@@ -676,6 +711,7 @@ run_test($testname, $command);
 my $LIB = "$lib_jss"."4"."$lib_suffix";
 my $strings_exist = `which strings`;
 chomp($strings_exist);
+my $result = 0;
 if ($strings_exist ne "") {
     (-f "$jss_lib_dir/$LIB") or die "$jss_lib_dir/$LIB does not exist\n";
     my $jsslibver = `strings $jss_lib_dir/$LIB | grep Header`;
@@ -687,20 +723,20 @@ if ($strings_exist ne "") {
     }
 } else {
     print "Could not fetch Header information from $jss_lib_dir/$LIB\n";
-    $result=1;
+    $result = 1;
 }
 
 print "\n================= Test Results\n";
 print "JSSTEST_SUITE: $testpass / $testrun\n";
 my $rate = $testpass / $testrun * 100;
-printf "JSSTEST_RATE: %.0f %\n",$rate;
+printf "JSSTEST_RATE: %.0f %%\n",$rate;
 
 if ($testpass ne $testrun) {
     printf "Test Status: FAILURE\n";
-    system("false");
     printf "to test failed tests set the classpath and run the command(s)\n";
     outputEnv();
+    exit 1;
 } else {
     printf "Test Status: SUCCESS\n";
-    system("true");
+    exit 0;
 }

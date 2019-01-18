@@ -172,10 +172,10 @@ public final class CryptoManager implements TokenSupplier
                     return token;
                 }
             } catch( TokenException e ) {
-                Assert._assert(false, "Got a token exception");
+                throw new RuntimeException(e);
             }
         }
-        throw new NoSuchTokenException();
+        throw new NoSuchTokenException("No such token: " + name);
     }
 
     /**
@@ -971,28 +971,20 @@ public final class CryptoManager implements TokenSupplier
     }
 
     /********************************************************************/
-    /* The VERSION Strings should be updated in the following           */
-    /* files everytime a new release of JSS is generated:               */
-    /*                                                                  */
-    /* lib/manifest.mn                                                  */
-    /* org/mozilla/jss/CryptoManager.c                                  */
-    /* org/mozilla/jss/CryptoManager.java                               */
-    /* org/mozilla/jss/JSSProvider.java                                 */
-    /* org/mozilla/jss/util/jssver.h                                    */
-    /*                                                                  */
+    /* The VERSION Strings should be updated everytime a new release    */
+    /* of JSS is generated. Note that this is done by changing          */
+    /* cmake/JSSConfig.cmake.                                           */
     /********************************************************************/
 
 
+    public native static int getJSSMajorVersion();
+    public native static int getJSSMinorVersion();
+    public native static int getJSSPatchVersion();
+
     public static final String
-    JAR_JSS_VERSION     = "JSS_VERSION = JSS_4_5";
-    public static final String
-    JAR_JDK_VERSION     = "JDK_VERSION = N/A";
-    public static final String
-    JAR_NSS_VERSION     = "NSS_VERSION = N/A";
-    public static final String
-    JAR_DBM_VERSION     = "DBM_VERSION = N/A";
-    public static final String
-    JAR_NSPR_VERSION    = "NSPR_VERSION = N/A";
+    JAR_JSS_VERSION     = "JSS_VERSION = JSS_" + getJSSMajorVersion() +
+                          "_" + getJSSMinorVersion() +
+                          "_" + getJSSPatchVersion();
 
     // Hashtable is synchronized.
     private Hashtable<Thread, CryptoToken> perThreadTokenTable = new Hashtable<>();
@@ -1003,11 +995,11 @@ public final class CryptoManager implements TokenSupplier
      * no means of specifying which token to use.
      *
      * <p>If no token is set, the InternalKeyStorageToken will be used. Setting
-     * this thread's token to <tt>null</tt> will also cause the
+     * this thread's token to <code>null</code> will also cause the
      * InternalKeyStorageToken to be used.
      *
      * @param token The token to use for crypto operations. Specifying
-     * <tt>null</tt> will cause the InternalKeyStorageToken to be used.
+     * <code>null</code> will cause the InternalKeyStorageToken to be used.
      */
     public void setThreadToken(CryptoToken token) {
         if( token != null ) {
@@ -1023,7 +1015,7 @@ public final class CryptoManager implements TokenSupplier
      * no means of specifying which token to use.
      *
      * <p>If no token is set, the InternalKeyStorageToken will be used. Setting
-     * this thread's token to <tt>null</tt> will also cause the
+     * this thread's token to <code>null</code> will also cause the
      * InternalKeyStorageToken to be used.
      *
      * @return The default token for this thread. If it has not been specified,
@@ -1085,6 +1077,7 @@ public final class CryptoManager implements TokenSupplier
      *      with the given nickname.
      * @deprecated Use verifyCertificate() instead
      */
+    @Deprecated
     public boolean isCertValid(String nickname, boolean checkSig,
             CertificateUsage certificateUsage)
         throws ObjectNotFoundException, InvalidNicknameException

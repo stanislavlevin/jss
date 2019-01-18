@@ -7,7 +7,7 @@
 #include <secmod.h>
 #include <cert.h>
 #include <certt.h>
-#include <key.h>
+#include <keyhi.h>
 #include <ocsp.h>
 #include <pk11func.h>
 #include <nspr.h>
@@ -46,15 +46,9 @@ const char * jss_sccsid() {
 }
 
 /********************************************************************/
-/* The VERSION Strings should be updated in the following           */
-/* files everytime a new release of JSS is generated:               */
-/*                                                                  */
-/* lib/manifest.mn                                                  */
-/* org/mozilla/jss/CryptoManager.c                                  */
-/* org/mozilla/jss/CryptoManager.java                               */
-/* org/mozilla/jss/JSSProvider.java                                 */
-/* org/mozilla/jss/util/jssver.h                                    */
-/*                                                                  */
+/* The VERSION Strings should be updated everytime a new release    */
+/* of JSS is generated. Note that this is done by changing          */
+/* cmake/JSSConfig.cmake.                                           */
 /********************************************************************/
 
 /* JSS_VERSION from  mozilla/security/jss/org/mozilla/jss/util/jssver.h */
@@ -133,7 +127,7 @@ int ConfigureOCSP(
             JSS_throwMsg(env, GENERAL_SECURITY_EXCEPTION,
                     "OCSP invalid URL");
             result = SECFailure;
-            goto loser;
+            goto finish;
         }
     }
 
@@ -144,7 +138,7 @@ int ConfigureOCSP(
             JSS_throwMsg(env, GENERAL_SECURITY_EXCEPTION,
                     "OCSP invalid nickname");
             result = SECFailure;
-            goto loser;
+            goto finish;
         }
     }
 
@@ -162,7 +156,7 @@ int ConfigureOCSP(
                 JSS_throwMsg(env, GENERAL_SECURITY_EXCEPTION,
                 "if OCSP responderURL is set, the Responder Cert nickname must be set");
                         result = SECFailure;
-                        goto loser;
+                        goto finish;
                 } else {
                         CERTCertificate *cert;
                         /* if the nickname is set */
@@ -177,7 +171,7 @@ int ConfigureOCSP(
                                 JSS_throwMsg(env, GENERAL_SECURITY_EXCEPTION,
                     "Unable to find the OCSP Responder Certificate nickname.");
                         result = SECFailure;
-                        goto loser;
+                        goto finish;
 	               }
                         CERT_DestroyCertificate(cert);
 	}
@@ -191,7 +185,7 @@ int ConfigureOCSP(
             JSS_throwMsg(env, GENERAL_SECURITY_EXCEPTION,
                     "OCSP Could not set responder");
             result = SECFailure;
-            goto loser;
+            goto finish;
         }
         CERT_EnableOCSPDefaultResponder(certdb);
     }
@@ -207,7 +201,7 @@ int ConfigureOCSP(
         CERT_EnableOCSPChecking(certdb);
     }
     
-loser:
+finish:
         
     if (ocspResponderURL_string)  {
         (*env)->ReleaseStringUTFChars(env,
@@ -1059,5 +1053,26 @@ Java_org_mozilla_jss_CryptoManager_setOCSPTimeoutNative(
                      GENERAL_SECURITY_EXCEPTION,
                      "Failed to set OCSP timeout: error "+ PORT_GetError());
     }
+}
+
+JNIEXPORT int JNICALL
+Java_org_mozilla_jss_CryptoManager_getJSSMajorVersion(
+        JNIEnv *env, jobject this)
+{
+    return JSS_VMAJOR;
+}
+
+JNIEXPORT int JNICALL
+Java_org_mozilla_jss_CryptoManager_getJSSMinorVersion(
+        JNIEnv * env, jobject this)
+{
+    return JSS_VMINOR;
+}
+
+JNIEXPORT int JNICALL
+Java_org_mozilla_jss_CryptoManager_getJSSPatchVersion(
+        JNIEnv *env, jobject this)
+{
+    return JSS_VPATCH;
 }
 

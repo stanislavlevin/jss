@@ -91,8 +91,8 @@ public class SSLServerSocket extends java.net.ServerSocket {
      * @param certApprovalCallback Will get called to approve any certificate
      *      presented by the client.
      * @param reuseAddr Reuse the local bind port; this parameter sets
-     *      the <tt>SO_REUSEADDR</tt> option on the socket before calling
-     *      <tt>bind()</tt>. The default is <tt>false</tt> for backward
+     *      the <code>SO_REUSEADDR</code> option on the socket before calling
+     *      <code>bind()</code>. The default is <code>false</code> for backward
      *      compatibility.
      */
     public SSLServerSocket(int port, int backlog, InetAddress bindAddr,
@@ -204,6 +204,10 @@ public class SSLServerSocket extends java.net.ServerSocket {
      */
     public static native void clearSessionCache();
 
+    /**
+     * @deprecated finalize() in Object has been deprecated
+     */
+    @Deprecated
     protected void finalize() throws Throwable {
         close(); /* in case user never called close */
     }
@@ -303,6 +307,7 @@ public class SSLServerSocket extends java.net.ServerSocket {
      * @deprecated As of JSS 3.0. This method is misnamed. Use
      *  <code>requestClientAuth</code> instead.
      */
+    @Deprecated
     public void setNeedClientAuth(boolean b) throws SocketException {
         base.requestClientAuth(b);
     }
@@ -324,6 +329,7 @@ public class SSLServerSocket extends java.net.ServerSocket {
      * @deprecated As of JSS 3.0. This method is misnamed. Use
      *  <code>requestClientAuthNoExpiryCheck</code> instead.
      */
+    @Deprecated
     public void setNeedClientAuthNoExpiryCheck(boolean b)
         throws SocketException
     {
@@ -477,6 +483,7 @@ public class SSLServerSocket extends java.net.ServerSocket {
      *  it.
      * @deprecated use requireClientAuth(int)
      */
+    @Deprecated
     public void requireClientAuth(boolean require, boolean onRedo)
             throws SocketException
     {

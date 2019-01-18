@@ -152,6 +152,17 @@ public class Utils {
         return sb.toString().toUpperCase();
     }
 
+    public static String HexEncode(byte data[]) {
+        StringBuffer sb = new StringBuffer();
+        for (int i = 0; i < data.length; i++) {
+            if ((data[i] & 0xff) < 16) {
+                sb.append("0");
+            }
+            sb.append(Integer.toHexString((data[i] & 0xff)));
+        }
+        return sb.toString();
+    }
+
     public static void checkHost(String hostname) throws UnknownHostException {
         InetAddress.getByName(hostname);
     }
@@ -303,7 +314,6 @@ public class Utils {
      * Each line is at most 64-character long and terminated with CRLF.
      *
      * @param bytes byte array
-     * @param chunked TODO
      * @return base-64 encoded data
      */
     public static String base64encodeMultiLine(byte[] bytes) {
@@ -335,16 +345,31 @@ public class Utils {
     /**
      * Normalize B64 input String
      *
-     * @pram string base-64 string
+     * @param string base-64 string
      * @return normalized string
      */
     public static String normalizeString(String string) {
+        return normalizeString(string, false);
+    }
+
+    /**
+     * Normalize B64 input String
+     *
+     * @param string base-64 string
+     * @param keepspace a boolean variable to control whether to keep spaces or not
+     * @return normalized string
+     */
+    public static String normalizeString(String string, Boolean keepSpace) {
         if (string == null) {
             return string;
         }
 
         StringBuffer sb = new StringBuffer();
-        StringTokenizer st = new StringTokenizer(string, "\r\n ");
+        StringTokenizer st = null;
+        if (keepSpace)
+            st = new StringTokenizer(string, "\r\n");
+        else
+            st = new StringTokenizer(string, "\r\n ");
 
         while (st.hasMoreTokens()) {
             String nextLine = st.nextToken();
@@ -353,4 +378,5 @@ public class Utils {
         }
         return sb.toString();
     }
+
 }
