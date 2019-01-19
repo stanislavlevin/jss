@@ -4,7 +4,7 @@
 %def_with check
 
 Name: jss
-Version: 4.5.0
+Version: 4.5.2
 Release: alt1
 
 Summary: Java Security Services (JSS)
@@ -121,6 +121,9 @@ cp -p *.txt %buildroot%_javadocdir/%name-%version
 %_javadocdir/%name-%version
 
 %changelog
+* Fri Jan 18 2019 Stanislav Levin <slev@altlinux.org> 4.5.2-alt1
+- 4.5.0 -> 4.5.2.
+
 * Mon Aug 13 2018 Stanislav Levin <slev@altlinux.org> 4.5.0-alt1
 - 4.4.5 -> 4.5.0.
 
