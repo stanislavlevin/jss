@@ -23,6 +23,7 @@ This project has the following dependencies:
 
  - [NSPR](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSPR)
  - [NSS](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS)
+    - Minimum version: 3.30
     - A c and c++ compiler such as [gcc](ttps://gcc.gnu.org/)
     - [zlib](https://zlib.net/)
  - [OpenJDK 1.8.0](https://openjdk.java.net/)
@@ -31,19 +32,23 @@ This project has the following dependencies:
  - [Apache Commons Codec](https://commons.apache.org/proper/commons-codec/)
  - [JavaEE JAXB](https://github.com/eclipse-ee4j/jaxb-ri)
  - [SLF4J](https://www.slf4j.org/)
+ - [JUnit 4](https://junit.org/junit4/)
+    - [Hamcrest](http://hamcrest.org/)
 
 To install these dependencies on Fedora, execute the following:
 
     sudo dnf install apache-commons-codec apache-commons-lang gcc-c++ \
                      java-devel jpackage-utils slf4j zlib-devel \
-                     glassfish-jaxb-api nss-tools nss-devel cmake
+                     glassfish-jaxb-api nss-tools nss-devel cmake \
+                     hamcrest junit
 
 To install these dependencies on Debian, execute the following:
 
     sudo apt-get install build-essential libcommons-codec-java \
                          libcommons-lang-java libnss3-dev libslf4j-java \
                          openjdk-8-jdk pkg-config zlib1g-dev \
-                         libjaxb-api-java libnss3-tools cmake zip unzip
+                         libjaxb-api-java libnss3-tools cmake zip unzip \
+                         libhamcrest-java junit4
 
 
 Building
@@ -53,7 +58,7 @@ To build JSS and make a best effort to detect environment variables:
 
     git clone https://github.com/dogtagpki/jss
     cd jss/build && cmake ..
-    make all check
+    make all test
 
 Alternatively, to build a RPM distribution of JSS:
 

@@ -6,7 +6,7 @@ Summary:        Java Security Services (JSS)
 URL:            http://www.dogtagpki.org/wiki/JSS
 License:        MPLv1.1 or GPLv2+ or LGPLv2+
 
-Version:        4.5.2
+Version:        4.5.3
 Release:        1%{?_timestamp}%{?_commit_id}%{?dist}
 # global         _phase -a1
 
@@ -38,8 +38,8 @@ BuildRequires:  cmake
 
 BuildRequires:  gcc-c++
 BuildRequires:  nspr-devel >= 4.13.1
-BuildRequires:  nss-devel >= 3.28.4-6
-BuildRequires:  nss-tools >= 3.28.4-6
+BuildRequires:  nss-devel >= 3.30
+BuildRequires:  nss-tools >= 3.30
 BuildRequires:  java-devel
 BuildRequires:  jpackage-utils
 BuildRequires:  slf4j
@@ -56,7 +56,10 @@ BuildRequires:  apache-commons-codec
 BuildRequires:  perl-interpreter
 %endif
 
-Requires:       nss >= 3.28.4-6
+BuildRequires:  junit
+BuildRequires:  hamcrest
+
+Requires:       nss >= 3.30
 Requires:       java-headless
 Requires:       jpackage-utils
 Requires:       slf4j
@@ -116,7 +119,8 @@ rm -rf build && mkdir -p build && cd build
     -DJAVA_LIB_INSTALL_DIR=%{_jnidir} \
     ..
 
-%{__make} all test javadoc
+%{__make} all javadoc
+ctest --output-on-failure
 
 ################################################################################
 %install
