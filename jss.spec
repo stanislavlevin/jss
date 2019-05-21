@@ -33,6 +33,8 @@ BuildRequires: slf4j-jdk14
 
 %if_with check
 BuildRequires: ctest
+BuildRequires: hamcrest
+BuildRequires: junit
 BuildRequires: nss-utils
 %endif
 
