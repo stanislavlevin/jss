@@ -574,15 +574,12 @@ Java_org_mozilla_jss_pkcs11_PK11Store_importPrivateKey
     /*
      * copy the java byte array into a local copy
      */
-    derPK.len = (*env)->GetArrayLength(env, keyArray);
-    if(derPK.len <= 0) {
-        JSS_throwMsg(env, INVALID_KEY_FORMAT_EXCEPTION, "Key array is empty");
-        goto finish;
-    }
-    derPK.data = (unsigned char*)
-            (*env)->GetByteArrayElements(env, keyArray, NULL);
-    if(derPK.data == NULL) {
-        ASSERT_OUTOFMEM(env);
+    if (!JSS_RefByteArray(env, keyArray, (jbyte **) &derPK.data, (jsize *) &derPK.len)) {
+        if (derPK.len == 0) {
+            JSS_throwMsg(env, INVALID_KEY_FORMAT_EXCEPTION, "Key array is empty");
+        } else {
+            ASSERT_OUTOFMEM(env);
+        }
         goto finish;
     }
 
@@ -618,12 +615,8 @@ finish:
     if( (excep=(*env)->ExceptionOccurred(env)) ) {
         (*env)->ExceptionClear(env);
     }
-    if(derPK.data != NULL) {
-        (*env)->ReleaseByteArrayElements(   env,
-                                            keyArray,
-                                            (jbyte*) derPK.data,
-                                            JNI_ABORT           );
-    }
+    JSS_DerefByteArray(env, keyArray, derPK.data, JNI_ABORT);
+
     /* now re-throw the exception */
     if( excep ) {
         (*env)->Throw(env, excep);
@@ -833,7 +826,7 @@ Java_org_mozilla_jss_pkcs11_PK11Store_importEncryptedPrivateKeyInfo(
     }
 
     // prepare nickname
-    nicknameChars = (*env)->GetStringUTFChars(env, nickname, NULL);
+    nicknameChars = JSS_RefJString(env, nickname);
     if (nicknameChars == NULL) {
         ASSERT_OUTOFMEM(env);
         goto finish;
@@ -881,9 +874,8 @@ finish:
     if (pubKey != NULL) {
         SECKEY_DestroyPublicKey(pubKey);
     }
-    if (nicknameChars != NULL) {
-        (*env)->ReleaseStringUTFChars(env, nickname, nicknameChars);
-    }
+
+    JSS_DerefJString(env, nickname, nicknameChars);
 }
 
 /* Process the given password through the given PasswordConverter,

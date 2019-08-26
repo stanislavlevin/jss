@@ -1,6 +1,12 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+#include <stdbool.h>
+
+#include <nspr.h>
+#include <jni.h>
+#include <secitem.h>
+
 #ifndef JSS_NATIVE_UTIL_H
 #define JSS_NATIVE_UTIL_H
 
@@ -16,12 +22,6 @@
 #define FUNCTION_MAY_NOT_BE_USED
 #define VARIABLE_MAY_NOT_BE_USED
 #endif
-
-/* Need to include these first.
- * #include <nspr.h>
- * #include <jni.h>
- * #include <secitem.h>
- */
 
 PR_BEGIN_EXTERN_C
 
@@ -57,7 +57,7 @@ extern JavaVM *JSS_javaVM;
  *      return -1;
  */
 void
-JSS_throwMsg(JNIEnv *env, char *throwableClassName, char *message);
+JSS_throwMsg(JNIEnv *env, const char *throwableClassName, const char *message);
 
 #define JSS_nativeThrowMsg JSS_throwMsg
 
@@ -256,8 +256,8 @@ JSS_strerror(PRErrorCode errNum);
 **      return -1;
 */
 void
-JSS_throwMsgPrErrArg(JNIEnv *env, char *throwableClassName, char *message,
-    PRErrorCode errCode);
+JSS_throwMsgPrErrArg(JNIEnv *env, const char *throwableClassName,
+    const char *message, PRErrorCode errCode);
 
 #define JSS_throwMsgPrErr(e, cn, m) \
     JSS_throwMsgPrErrArg((e), (cn), (m), PR_GetError())
@@ -295,6 +295,61 @@ int JSS_ConvertNativeErrcodeToJava(int nativeErrcode);
 **  The new jbyteArray object or NULL on failure.
 */
 jbyteArray JSS_ToByteArray(JNIEnv *env, const void *data, int length);
+
+/************************************************************************
+** JSS_RefByteArray.
+**
+** References the contents of a Java ByteArray into *data, and optionally
+** records length information to *lenght. Must be dereferenced via calling
+** JSS_DerefByteArray.
+**
+** Returns
+**  bool - whether or not the operation succeeded.
+*/
+bool JSS_RefByteArray(JNIEnv *env, jbyteArray array, jbyte **data,
+    jsize *length);
+
+/************************************************************************
+** JSS_DerefByteArray.
+**
+** Dereferences the specified ByteArray and passed reference. mode is the
+** same as given to (*env)->ReleaseByteArrayElements: 0 for copy and free,
+** JNI_COMMIT for copy without freeing, and JNI_ABORT for free-only.
+**
+*/
+void JSS_DerefByteArray(JNIEnv *env, jbyteArray array, void *data, jint mode);
+
+/************************************************************************
+** JSS_FromByteArray.
+**
+** Converts the given chararacter array from a Java byte array into a array of
+** uint_t. When length is passed and is not NULL, *length is updated with the
+** length of the array.
+**
+** Returns
+**  bool - whether or not the operation succeeded.
+*/
+bool JSS_FromByteArray(JNIEnv *env, jbyteArray array, uint8_t **data,
+    size_t *length);
+
+/************************************************************************
+** JSS_RefJString
+**
+** Converts the given jstring object to a char *; must be freed with
+** JSS_DerefJString().
+**
+** Returns
+**  A reference to the characters underlying the given string.
+*/
+const char *JSS_RefJString(JNIEnv *env, jstring str);
+
+/************************************************************************
+** JSS_DerefJString
+**
+** Returns the reference given by the JVM to a jstring's contents.
+**
+*/
+void JSS_DerefJString(JNIEnv *env, jstring str, const char *ref);
 
 PR_END_EXTERN_C
 

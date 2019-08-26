@@ -14,9 +14,9 @@
 #include <secpkcs7.h>
 
 #include <jssutil.h>
-
 #include <jss_exceptions.h>
 #include "pk11util.h"
+#include "ssl/jssl.h"
 #include <java_ids.h>
 
 /*
@@ -41,14 +41,14 @@ JNIEXPORT jobject JNICALL
 Java_org_mozilla_jss_CryptoManager_findCertByNicknameNative
   (JNIEnv *env, jobject this, jstring nickname)
 {
-    char *nick=NULL;
+    const char *nick = NULL;
     jobject certObject=NULL;
     CERTCertificate *cert=NULL;
     PK11SlotInfo *slot=NULL;
 
     PR_ASSERT(env!=NULL && this!=NULL && nickname!=NULL);
 
-    nick = (char*) (*env)->GetStringUTFChars(env, nickname, NULL);
+    nick = JSS_RefJString(env, nickname);
     PR_ASSERT(nick!=NULL);
 
     cert = JSS_PK11_findCertAndSlotFromNickname(nick, NULL, &slot);
@@ -63,9 +63,7 @@ Java_org_mozilla_jss_CryptoManager_findCertByNicknameNative
     certObject = JSS_PK11_wrapCertAndSlot(env, &cert, &slot);
 
 finish:
-    if(nick != NULL) {
-        (*env)->ReleaseStringUTFChars(env, nickname, nick);
-    }
+    JSS_DerefJString(env, nickname, nick);
     if(cert != NULL) {
         CERT_DestroyCertificate(cert);
     }
@@ -89,13 +87,12 @@ Java_org_mozilla_jss_CryptoManager_findCertsByNicknameNative
     jobjectArray certArray=NULL;
     CERTCertListNode *node;
     const char *nickChars=NULL;
-    jboolean charsAreCopied;
     jclass certClass;
     int count;
     int i;
 
     /* convert the nickname string */
-    nickChars = (*env)->GetStringUTFChars(env, nickname, &charsAreCopied);
+    nickChars = JSS_RefJString(env, nickname);
     if( nickChars == NULL ) {
         goto finish;
     }
@@ -165,9 +162,7 @@ finish:
     if(slot) {
         PK11_FreeSlot(slot);
     }
-    if( nickChars && charsAreCopied ) {
-        (*env)->ReleaseStringUTFChars(env, nickname, nickChars);
-    }
+    JSS_DerefJString(env, nickname, nickChars);
     return certArray;
 }
 
@@ -550,9 +545,8 @@ Java_org_mozilla_jss_CryptoManager_importCertToPermNative
     }
     PR_ASSERT(oldCert != NULL);
 
-    if (nickString != NULL) {
-        nickname = (char*) (*env)->GetStringUTFChars(env, nickString, NULL);
-    }
+    /* dereference, discarding const qualifier */
+    nickname = (char *)JSS_RefJString(env, nickString);
     /* Then, add to permanent database */
 
     derCertArray[0] = &oldCert->derCert;
@@ -570,9 +564,7 @@ Java_org_mozilla_jss_CryptoManager_importCertToPermNative
 finish:
     /* this checks for NULL */
     CERT_DestroyCertArray(certArray, 1);
-    if (nickname != NULL) {
-        (*env)->ReleaseStringUTFChars(env, nickString, nickname);
-    }
+    JSS_DerefJString(env, nickString, nickname);
     return result;
 }
 
@@ -824,12 +816,10 @@ Java_org_mozilla_jss_CryptoManager_importCertPackageNative
     /***************************************************
      * Convert package from byte array to jbyte*
      ***************************************************/
-    packageBytes = (*env)->GetByteArrayElements(env, packageArray, NULL);
-    if(packageBytes == NULL) {
-        PR_ASSERT( (*env)->ExceptionOccurred(env) );
+    if (!JSS_RefByteArray(env, packageArray, &packageBytes, &packageLen)) {
+        PR_ASSERT((*env)->ExceptionOccurred(env));
         goto finish;
     }
-    packageLen = (*env)->GetArrayLength(env, packageArray);
 
     /***************************************************
      * Decode package with NSS function
@@ -849,13 +839,9 @@ Java_org_mozilla_jss_CryptoManager_importCertPackageNative
     numCerts = collection.numCerts;
 
     /***************************************************
-     * convert nickname to char*
+     * convert nickname to char*, discarding const
      ***************************************************/
-    if(nickString == NULL) {
-        nickChars = NULL;
-    } else {
-        nickChars = (char*) (*env)->GetStringUTFChars(env, nickString, NULL);
-    }
+    nickChars = (char *)JSS_RefJString(env, nickString);
 
     /***************************************************
      * user cert can be anywhere in the cert chain. loop and find it.
@@ -880,7 +866,7 @@ Java_org_mozilla_jss_CryptoManager_importCertPackageNative
          Handles the case when the user certificate is not in
          the certificate chain.
         */
-        if ((slot == NULL)) { /* same as "noUser = 1" */
+        if (slot == NULL) { /* same as "noUser = 1" */
             /* #397713 */
             if (!find_leaf_cert(certdb, derCerts,
                     numCerts, &theDerCert))
@@ -1036,13 +1022,12 @@ finish:
         }
         PR_Free(derCerts);
     }
-    if(packageBytes != NULL) {
-        (*env)->ReleaseByteArrayElements(env, packageArray, packageBytes,
-                                            JNI_ABORT); /* don't copy back */
-    }
+    /* don't copy back */
+    JSS_DerefByteArray(env, packageArray, packageBytes, JNI_ABORT);
     if(leafCert != NULL) {
         CERT_DestroyCertificate(leafCert);
     }
+    JSS_DerefJString(env, nickString, nickChars);
 
     return leafObject;
 }
@@ -1335,10 +1320,7 @@ finish:
     if( cinfo != NULL) {
         SEC_PKCS7DestroyContentInfo(cinfo);
     }
-    if(pkcs7Bytes != NULL) {
-        PR_ASSERT(pkcs7ByteArray != NULL);
-        (*env)->ReleaseByteArrayElements(env, pkcs7ByteArray, pkcs7Bytes, 0);
-    }
+    JSS_DerefByteArray(env, pkcs7ByteArray, pkcs7Bytes, 0);
     if( info != NULL ) {
         destroyEncoderCallbackInfo(info);
     }
@@ -1468,7 +1450,7 @@ Java_org_mozilla_jss_CryptoManager_importCRLNative
     SECItem *packageItem = NULL;
     int status = SECFailure;
     char *url = NULL;
-    char *errmsg = NULL;
+    const char *errmsg = NULL;
 
     /***************************************************
      * Validate arguments
@@ -1489,14 +1471,10 @@ Java_org_mozilla_jss_CryptoManager_importCRLNative
     if ( packageItem == NULL ) {
         goto finish;
     }
-    /* XXX need to deal with if error */
 
-    if (url_jstr != NULL) {
-        url = (char*) (*env)->GetStringUTFChars(env, url_jstr, NULL);
-        PR_ASSERT(url!=NULL);
-    }
-    else {
-        url = NULL;
+    url = (char *)JSS_RefJString(env, url_jstr);
+    if (url_jstr != NULL && url == NULL) {
+        goto finish;
     }
 
     crl = CERT_ImportCRL( certdb, packageItem, url, rl_type, NULL);
@@ -1546,9 +1524,7 @@ finish:
         SECITEM_FreeItem(packageItem, PR_TRUE /*freeit*/);
     }
 
-    if(url != NULL) {
-        (*env)->ReleaseStringUTFChars(env, url_jstr, url);
-    }
+    JSS_DerefJString(env, url_jstr, url);
 
     if (crl) {
         SEC_DestroyCrl(crl);
@@ -1567,12 +1543,15 @@ SECStatus verifyCertificateNow(JNIEnv *env, jobject self, jstring nickString,
     SECStatus         rv    = SECFailure;
     SECCertificateUsage      certificateUsage;
     CERTCertificate   *cert=NULL;
-    char *nickname=NULL;
+    const char *nickname = NULL;
 
-    nickname = (char *) (*env)->GetStringUTFChars(env, nickString, NULL);
+    nickname = JSS_RefJString(env, nickString);
     if( nickname == NULL ) {
          goto finish;
     }
+
+    int ocspPolicy = JSSL_getOCSPPolicy();
+    
 
     certificateUsage = required_certificateUsage;
 
@@ -1587,8 +1566,24 @@ SECStatus verifyCertificateNow(JNIEnv *env, jobject self, jstring nickString,
     /* 0 for certificateUsage in call to CERT_VerifyCertificateNow will
      * retrieve the current valid usage into currUsage
      */
-        rv = CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
-            checkSig, certificateUsage, NULL, currUsage );
+        if( ocspPolicy == OCSP_LEAF_AND_CHAIN_POLICY) {
+            rv = JSSL_verifyCertPKIX( cert, certificateUsage,
+                     NULL /* pin arg */, ocspPolicy, NULL, currUsage);
+
+            /* we need to do this just to get the cert usages, the pkix version
+               doesn't seem to honor the method to get the usages as of yet.
+               Let the PKIX call only determine the final fate.
+            */
+            if(rv == SECSuccess) {
+                CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
+                checkSig, certificateUsage, NULL, currUsage );
+            }
+
+        } else {
+            rv = CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
+                checkSig, certificateUsage, NULL, currUsage );
+        }
+
         if ((rv == SECSuccess) && certificateUsage == 0x0000) {
             if (*currUsage == 
                 ( certUsageUserCertImport |
@@ -1609,9 +1604,7 @@ SECStatus verifyCertificateNow(JNIEnv *env, jobject self, jstring nickString,
     }
 
 finish:
-    if(nickname != NULL) {
-      (*env)->ReleaseStringUTFChars(env, nickString, nickname);
-    }
+    JSS_DerefJString(env, nickString, nickname);
     if(cert != NULL) {
        CERT_DestroyCertificate(cert);
     }
@@ -1632,12 +1625,14 @@ Java_org_mozilla_jss_CryptoManager_verifyCertificateNowNative(JNIEnv *env,
     SECCertificateUsage      certificateUsage;
     SECCertificateUsage      currUsage;  /* unexposed for now */
     CERTCertificate   *cert=NULL;
-    char *nickname=NULL;
+    const char *nickname = NULL;
 
-    nickname = (char *) (*env)->GetStringUTFChars(env, nickString, NULL);
+    nickname = JSS_RefJString(env, nickString);
     if( nickname == NULL ) {
          goto finish;
     }
+
+    int ocspPolicy = JSSL_getOCSPPolicy();
 
     certificateUsage = required_certificateUsage;
 
@@ -1653,14 +1648,27 @@ Java_org_mozilla_jss_CryptoManager_verifyCertificateNowNative(JNIEnv *env,
      * just get the current usage (which we are not passing back for now
      * but will bypass the certificate usage check
      */
-        rv = CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
-            checkSig, certificateUsage, NULL, &currUsage );
+
+        if( ocspPolicy == OCSP_LEAF_AND_CHAIN_POLICY) {
+            rv= JSSL_verifyCertPKIX( cert, certificateUsage,
+                     NULL /* pin arg */, ocspPolicy, NULL, &currUsage);
+
+            /* we need to do this just to get the cert usages, the pkix version
+               doesn't seem to honor the method to get the usages as of yet.
+               Let the PKIX call only determine the final fate.
+            */
+            if(rv == SECSuccess) {
+                CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
+                checkSig, certificateUsage, NULL, &currUsage );
+            }
+        } else {
+            rv = CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
+                checkSig, certificateUsage, NULL, &currUsage );
+        }
     }
 
 finish:
-    if(nickname != NULL) {
-      (*env)->ReleaseStringUTFChars(env, nickString, nickname);
-    }
+    JSS_DerefJString(env, nickString, nickname);
     if(cert != NULL) {
        CERT_DestroyCertificate(cert);
     }
@@ -1719,14 +1727,16 @@ Java_org_mozilla_jss_CryptoManager_verifyCertificateNowNative2(JNIEnv *env,
     SECCertificateUsage      currUsage = 0x0000;  /* unexposed for now */
     SECStatus                rv = SECFailure;
     CERTCertificate          *cert = NULL;
-    char                     *nickname = NULL;
-    
+    const char *nickname = NULL;
+   
     if (nickString == NULL) {
         JSS_throwMsg(env, INVALID_NICKNAME_EXCEPTION, "Missing certificate nickname");
         goto finish;
     }
 
-    nickname = (char *) (*env)->GetStringUTFChars(env, nickString, NULL);
+    int ocspPolicy = JSSL_getOCSPPolicy();
+    nickname = JSS_RefJString(env, nickString);
+
     if (nickname == NULL) {
         JSS_throwMsg(env, INVALID_NICKNAME_EXCEPTION, "Missing certificate nickname");
         goto finish;
@@ -1747,8 +1757,25 @@ Java_org_mozilla_jss_CryptoManager_verifyCertificateNowNative2(JNIEnv *env,
     /* 0 for certificateUsage in call to CERT_VerifyCertificateNow will
      * retrieve the current valid usage into currUsage
      */
-    rv = CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
-        checkSig, certificateUsage, NULL, &currUsage);
+
+    if( ocspPolicy == OCSP_LEAF_AND_CHAIN_POLICY) {
+        rv = JSSL_verifyCertPKIX( cert, certificateUsage,
+                     NULL /* pin arg */, ocspPolicy, NULL, &currUsage);
+
+        /* we need to do this just to get the cert usages, the pkix version
+           doesn't seem to honor the method to get the usages as of yet.
+           Let the PKIX call only determine the final fate.
+        */
+        if(rv == SECSuccess) {
+            CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
+            checkSig, certificateUsage, NULL, &currUsage );
+
+        }
+
+    } else {
+        rv = CERT_VerifyCertificateNow(CERT_GetDefaultCertDB(), cert,
+                     checkSig, certificateUsage, NULL, &currUsage);
+    }
 
     if (rv != SECSuccess) {
         JSS_throwMsgPrErr(env, CERTIFICATE_EXCEPTION, "Invalid certificate");
@@ -1776,9 +1803,7 @@ Java_org_mozilla_jss_CryptoManager_verifyCertificateNowNative2(JNIEnv *env,
     }
 
 finish:
-    if (nickname != NULL) {
-        (*env)->ReleaseStringUTFChars(env, nickString, nickname);
-    }
+    JSS_DerefJString(env, nickString, nickname);
     if (cert != NULL) {
         CERT_DestroyCertificate(cert);
     }
@@ -1797,12 +1822,15 @@ Java_org_mozilla_jss_CryptoManager_verifyCertNowNative(JNIEnv *env,
     SECStatus         rv    = SECFailure;
     SECCertUsage      certUsage;
     CERTCertificate   *cert=NULL;
-    char *nickname=NULL;
+    const char *nickname = NULL;
 
-    nickname = (char *) (*env)->GetStringUTFChars(env, nickString, NULL);
+    nickname = JSS_RefJString(env, nickString);
     if( nickname == NULL ) {
          goto finish;
     }
+
+    int ocspPolicy = JSSL_getOCSPPolicy();
+
     certUsage = cUsage;
     cert = CERT_FindCertByNickname(CERT_GetDefaultCertDB(), nickname);
 
@@ -1812,14 +1840,17 @@ Java_org_mozilla_jss_CryptoManager_verifyCertNowNative(JNIEnv *env,
         PR_smprintf_free(message);
         goto finish;
     } else {
-        rv = CERT_VerifyCertNow(CERT_GetDefaultCertDB(), cert,
-            checkSig, certUsage, NULL );
+        if( ocspPolicy == OCSP_LEAF_AND_CHAIN_POLICY) {
+            rv = JSSL_verifyCertPKIX( cert, certUsage,
+                NULL /* pin arg */, ocspPolicy, NULL, NULL);
+        } else {
+            rv = CERT_VerifyCertNow(CERT_GetDefaultCertDB(), cert,
+                checkSig, certUsage, NULL );
+        }
     }
 
 finish:
-    if(nickname != NULL) {
-      (*env)->ReleaseStringUTFChars(env, nickString, nickname);
-    }
+    JSS_DerefJString(env, nickString, nickname);
     if(cert != NULL) {
        CERT_DestroyCertificate(cert);
     }
@@ -1858,6 +1889,8 @@ Java_org_mozilla_jss_CryptoManager_verifyCertTempNative(JNIEnv *env,
     derCerts[0] = JSS_ByteArrayToSECItem(env, packageArray);
     derCerts[1] = NULL;
 
+    int ocspPolicy = JSSL_getOCSPPolicy();
+
     rv = CERT_ImportCerts(certdb, cUsage,
                           1, derCerts, &certArray, PR_FALSE /*temp Certs*/,
                           PR_FALSE /*caOnly*/, NULL);
@@ -1869,8 +1902,14 @@ Java_org_mozilla_jss_CryptoManager_verifyCertTempNative(JNIEnv *env,
     }
 
     certUsage = cUsage;
-    rv = CERT_VerifyCertNow(certdb, certArray[0],
-                            checkSig, certUsage, NULL );
+
+    if( ocspPolicy == OCSP_LEAF_AND_CHAIN_POLICY) {
+        rv = JSSL_verifyCertPKIX( certArray[0], certUsage,
+            NULL /* pin arg */, ocspPolicy, NULL, NULL);
+    } else {
+        rv = CERT_VerifyCertNow(certdb, certArray[0],
+            checkSig, certUsage, NULL );
+    }
 
     finish:
     /* this checks for NULL */

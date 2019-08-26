@@ -10,9 +10,14 @@ cmake_minimum_required(VERSION 3.0.2)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
 # Define optional variables and conditionals.
-if (DEFINED CHECK_DEPRECATION)
-    set(CMAKE_JAVA_COMPILE_FLAGS "-Xlint:deprecation")
+if (DEFINED ENV{CHECK_DEPRECATION})
+    list(APPEND JSS_JAVAC_FLAGS "-Xlint:deprecation")
 endif()
+
+if (DEFINED ENV{FIPS_ENABLED})
+    set(FIPS_ENABLED_ENV TRUE)
+endif()
+option(FIPS_ENABLED "When enabled, disable certain tests which don't work in FIPS mode. This should only be specified when the host system is in FIPS mode." ${FIPS_ENABLED_ENV})
 
 # Build a debug build by default when no type is specified on the command line
 if(NOT (DEFINED CMAKE_BUILD_TYPE))

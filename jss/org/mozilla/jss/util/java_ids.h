@@ -277,6 +277,15 @@ PR_BEGIN_EXTERN_C
 #define GET_BUF_SIZE_SIG "()I"
 
 /*
+ * CryptoManager
+ *
+*/
+
+#define CRYPTO_MANAGER_NAME "org/mozilla/jss/CryptoManager"
+#define GET_OCSP_POLICY_NAME "getOCSPPolicy"
+#define GET_OCSP_POLICY_SIG "()I"
+
+/*
  * SocketBase
  */
 #define SOCKET_BASE_NAME "org/mozilla/jss/ssl/SocketBase"
@@ -370,6 +379,24 @@ PR_BEGIN_EXTERN_C
 #define SSL_VERSION_RANGE_CLASS_NAME "org/mozilla/jss/ssl/SSLVersionRange"
 #define SSL_VERSION_RANGE_CONSTRUCTOR_NAME "<init>"
 #define SSL_VERSION_RANGE_CONSTRUCTOR_SIG "(II)V"
+
+/*
+ * PRFDProxy
+ */
+#define PRFD_PROXY_CLASS_NAME "org/mozilla/jss/nss/PRFDProxy"
+#define PRFD_PROXY_CONSTRUCTOR_SIG "([B)V"
+
+/*
+ * SecurityStatusResult
+ */
+#define SECURITY_STATUS_CLASS_NAME "org/mozilla/jss/nss/SecurityStatusResult"
+#define SECURITY_STATUS_CONSTRUCTOR_SIG "(I[BII[B[B)V"
+
+/*
+ * BufferProxy
+ */
+#define BUFFER_PROXY_CLASS_NAME "org/mozilla/jss/nss/BufferProxy"
+#define BUFFER_PROXY_CONSTRUCTOR_SIG "([B)V"
 
 PR_END_EXTERN_C
 

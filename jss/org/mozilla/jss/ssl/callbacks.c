@@ -20,6 +20,40 @@
 #include <pk11util.h>
 #include <secder.h>
 
+int
+JSSL_getOCSPPolicy() {
+    JNIEnv *env;
+    jint policy = -1;
+
+    jmethodID getOCSPPolicyID;
+    jclass cryptoManagerClass;
+
+    /* get the JNI environment */
+    if((*JSS_javaVM)->AttachCurrentThread(JSS_javaVM, (void**)&env, NULL) != 0){
+        PR_ASSERT(PR_FALSE);
+        goto finish;
+    }
+
+    cryptoManagerClass = (*env)->FindClass(env, CRYPTO_MANAGER_NAME);
+    if( cryptoManagerClass == NULL ) {
+        ASSERT_OUTOFMEM(env);
+        goto finish;
+    }
+    getOCSPPolicyID = (*env)->GetStaticMethodID(env, cryptoManagerClass,
+        GET_OCSP_POLICY_NAME,GET_OCSP_POLICY_SIG);
+
+    if( getOCSPPolicyID == NULL ) {
+        ASSERT_OUTOFMEM(env);
+        goto finish;
+    }
+
+    policy = (*env)->CallStaticIntMethod(env, cryptoManagerClass,
+         getOCSPPolicyID);
+
+finish:
+    return (int) policy;
+}
+
 static SECStatus
 secCmpCertChainWCANames(CERTCertificate *cert, CERTDistNames *caNames) 
 {
@@ -115,8 +149,7 @@ JSSL_CallCertSelectionCallback(    void * arg,
     jmethodID vector_add;
     jstring nickname_string;
     jstring chosen_nickname;
-    char *chosen_nickname_for_c;
-    jboolean chosen_nickname_cleanup;
+    const char *chosen_nickname_for_c;
     jclass clientcertselectionclass;
     jmethodID clientcertselectionclass_select;
     JNIEnv *env;
@@ -224,15 +257,12 @@ JSSL_CallCertSelectionCallback(    void * arg,
     chosen_nickname = (*env)->CallObjectMethod(env,nicknamecallback,
             clientcertselectionclass_select,
             vector
-            );
+    );
 
-    if (chosen_nickname == NULL) {
+    chosen_nickname_for_c = JSS_RefJString(env, chosen_nickname);
+    if (chosen_nickname_for_c == NULL) {
         return SECFailure;
     }
-
-    chosen_nickname_for_c = (char*)(*env)->GetStringUTFChars(env,
-        chosen_nickname,
-        &chosen_nickname_cleanup);
 
     if (debug_cc) { PR_fprintf(PR_STDOUT,"  chosen nickname: %s\n",chosen_nickname_for_c); }
     cert = JSS_PK11_findCertAndSlotFromNickname(chosen_nickname_for_c,
@@ -241,20 +271,16 @@ JSSL_CallCertSelectionCallback(    void * arg,
 
     if (debug_cc) { PR_fprintf(PR_STDOUT,"  found certificate\n"); }
 
-    if (chosen_nickname_cleanup == JNI_TRUE) {
-        (*env)->ReleaseStringUTFChars(env,
-            chosen_nickname,
-            chosen_nickname_for_c);
-    }
-            
+    JSS_DerefJString(env, chosen_nickname, chosen_nickname_for_c);
 
     if (cert == NULL) {
         return SECFailure;
     }
 
-        privkey = PK11_FindPrivateKeyFromCert(slot, cert, NULL /*pinarg*/);
-        PK11_FreeSlot(slot);
-        if ( privkey == NULL )  {
+    privkey = PK11_FindPrivateKeyFromCert(slot, cert, NULL /*pinarg*/);
+    PK11_FreeSlot(slot);
+
+    if ( privkey == NULL )  {
         CERT_DestroyCertificate(cert);
         return SECFailure;
     }
@@ -443,8 +469,12 @@ JSSL_DefaultCertAuthCallback(void *arg, PRFileDesc *fd, PRBool checkSig,
     SECCertUsage      certUsage;
     CERTCertificate   *peerCert=NULL;
 
+    int ocspPolicy = JSSL_getOCSPPolicy();
+
     certUsage = isServer ? certUsageSSLClient : certUsageSSLServer;
- 
+
+    /* PKIX call needs a SECCertificate usage, convert */
+    SECCertificateUsage certificateUsage =  (SECCertificateUsage)1 << certUsage;
 
     /* SSL_PeerCertificate() returns a shallow copy of the cert, so we
        must destroy it before we exit this function */
@@ -452,8 +482,13 @@ JSSL_DefaultCertAuthCallback(void *arg, PRFileDesc *fd, PRBool checkSig,
     peerCert   = SSL_PeerCertificate(fd);
 
     if (peerCert) {
-        rv = CERT_VerifyCertNow(CERT_GetDefaultCertDB(), peerCert,
-                checkSig, certUsage, NULL /*pinarg*/);
+        if( ocspPolicy == OCSP_LEAF_AND_CHAIN_POLICY) {
+            rv = JSSL_verifyCertPKIX( peerCert, certificateUsage,
+                     NULL /* pin arg */, ocspPolicy, NULL, NULL);
+        } else {
+            rv = CERT_VerifyCertNow(CERT_GetDefaultCertDB(), peerCert,
+                    checkSig, certUsage, NULL /*pinarg*/);
+        }
     }
 
     /* if we're a server, then we don't need to check the CN of the
@@ -569,6 +604,8 @@ JSSL_JavaCertAuthCallback(void *arg, PRFileDesc *fd, PRBool checkSig,
     log.tail = NULL;
     log.count = 0;
 
+    int ocspPolicy = JSSL_getOCSPPolicy();
+
     /* get the JNI environment */
     if((*JSS_javaVM)->AttachCurrentThread(JSS_javaVM, (void**)&env, NULL) != 0){
         PR_ASSERT(PR_FALSE);
@@ -582,6 +619,9 @@ JSSL_JavaCertAuthCallback(void *arg, PRFileDesc *fd, PRBool checkSig,
     if (peerCert == NULL) goto finish;
 
     certUsage = isServer ? certUsageSSLClient : certUsageSSLServer;
+    /* PKIX call needs a SECCertificate usage, convert */
+    SECCertificateUsage certificateUsage =  (SECCertificateUsage)1 << certUsage;
+
 
     /* 
      * verify it against current time - (can't use
@@ -589,13 +629,18 @@ JSSL_JavaCertAuthCallback(void *arg, PRFileDesc *fd, PRBool checkSig,
      * logging parameter)
      */
 
-    verificationResult = CERT_VerifyCert(   CERT_GetDefaultCertDB(),
-                            peerCert,
-                            checkSig,
-                            certUsage,
-                            PR_Now(),
-                            NULL /*pinarg*/,
-                            &log);
+    if( ocspPolicy == OCSP_LEAF_AND_CHAIN_POLICY) {
+        verificationResult = JSSL_verifyCertPKIX( peerCert, certificateUsage,
+                                 NULL /* pin arg */, ocspPolicy, &log, NULL);
+     }  else {
+        verificationResult = CERT_VerifyCert(   CERT_GetDefaultCertDB(),
+                                peerCert,
+                                checkSig,
+                                certUsage,
+                                PR_Now(),
+                                NULL /*pinarg*/,
+                                &log);
+     }
 
     if (verificationResult == SECSuccess && log.count > 0) {
         verificationResult = SECFailure;

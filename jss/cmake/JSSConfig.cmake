@@ -2,7 +2,7 @@ macro(jss_config)
     # Set the current JSS release number. Arguments are:
     #   MAJOR MINOR PATCH BETA
     # When BETA is zero, it isn't a beta release.
-    jss_config_version(4 5 3 0)
+    jss_config_version(4 6 1 0)
 
     # Configure output directories
     jss_config_outputs()
@@ -63,6 +63,7 @@ macro(jss_config_outputs)
     set(CLASSES_OUTPUT_DIR "${CMAKE_BINARY_DIR}/classes/jss")
     set(DOCS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/docs")
     set(LIB_OUTPUT_DIR "${CMAKE_BINARY_DIR}/lib")
+    set(BIN_OUTPUT_DIR "${CMAKE_BINARY_DIR}/bin")
     set(INCLUDE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/include/jss")
     set(JNI_OUTPUT_DIR "${CMAKE_BINARY_DIR}/include/jss/_jni")
 
@@ -100,6 +101,7 @@ macro(jss_config_outputs)
     file(MAKE_DIRECTORY "${CLASSES_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${DOCS_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${LIB_OUTPUT_DIR}")
+    file(MAKE_DIRECTORY "${BIN_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${INCLUDE_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${JNI_OUTPUT_DIR}")
 
@@ -119,13 +121,17 @@ macro(jss_config_cflags)
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
         list(APPEND JSS_RAW_C_FLAGS "-Og")
         list(APPEND JSS_RAW_C_FLAGS "-ggdb")
+        list(APPEND JSS_RAW_C_FLAGS "-DDEBUG")
+        list(APPEND JSS_RAW_C_FLAGS "-DFORCE_PR_ASSERT")
     else()
         list(APPEND JSS_RAW_C_FLAGS "-O2")
     endif()
 
     list(APPEND JSS_RAW_C_FLAGS "-Wall")
+    list(APPEND JSS_RAW_C_FLAGS "-std=gnu99")
     list(APPEND JSS_RAW_C_FLAGS "-Wno-cast-function-type")
     list(APPEND JSS_RAW_C_FLAGS "-Wno-unused-parameter")
+    list(APPEND JSS_RAW_C_FLAGS "-Wno-unknown-warning-option")
     list(APPEND JSS_RAW_C_FLAGS "-Werror-implicit-function-declaration")
     list(APPEND JSS_RAW_C_FLAGS "-Wno-switch")
     list(APPEND JSS_RAW_C_FLAGS "-I${NSPR_INCLUDE_DIR}")
@@ -148,7 +154,7 @@ macro(jss_config_cflags)
     # Handle passed-in C flags as well; assume they are valid.
     separate_arguments(PASSED_C_FLAGS UNIX_COMMAND "${CMAKE_C_FLAGS}")
     foreach(PASSED_C_FLAG ${PASSED_C_FLAGS})
-        list(APPEND JSS_C_FLAGS "${PASSED_C_FLAG}")
+        list(INSERT JSS_C_FLAGS 0 "${PASSED_C_FLAG}")
     endforeach()
 
     message(STATUS "JSS C FLAGS: ${JSS_C_FLAGS}")
@@ -168,6 +174,11 @@ macro(jss_config_ldflags)
     list(APPEND JSS_LD_FLAGS "-lpthread")
     list(APPEND JSS_LD_FLAGS "-ldl")
 
+    separate_arguments(PASSED_LD_FLAGS UNIX_COMMAND "${CMAKE_SHARED_LINKER_FLAGS}")
+    foreach(PASSED_LD_FLAG ${PASSED_LD_FLAGS})
+        list(INSERT JSS_LD_FLAGS 0 "${PASSED_LD_FLAG}")
+    endforeach()
+
     # This set of flags is specific to building the libjss library.
     list(APPEND JSS_LIBRARY_FLAGS "-shared")
     list(APPEND JSS_LIBRARY_FLAGS "-Wl,-z,defs")
@@ -175,6 +186,9 @@ macro(jss_config_ldflags)
     list(APPEND JSS_LIBRARY_FLAGS "-Wl,${JSS_SO}")
 
     set(JSS_VERSION_SCRIPT "-Wl,--version-script,${PROJECT_SOURCE_DIR}/lib/jss.map")
+
+    message(STATUS "JSS LD FLAGS: ${JSS_LD_FLAGS}")
+    message(STATUS "JSS LIBRARY FLAGS: ${JSS_LIBRARY_FLAGS}")
 endmacro()
 
 macro(jss_config_java)
@@ -205,7 +219,7 @@ macro(jss_config_java)
     )
     find_jar(
         HAMCREST_JAR
-        NAMES hamcrest/core
+        NAMES hamcrest/core hamcrest-core
     )
 
     # Validate that we've found the required JARs
@@ -229,7 +243,7 @@ macro(jss_config_java)
         message(WARNING "Test dependency sfl4j-jdk14.jar not found by find_jar! Tests might not run properly.")
     endif()
 
-    if(JUINT4_JAR STREQUAL "JUNIT4_JAR-NOTFOUND")
+    if(JUNIT4_JAR STREQUAL "JUNIT4_JAR-NOTFOUND")
         message(FATAL_ERROR "Test dependency junit4.jar not found by find_jar! Tests will not compile.")
     endif()
 
@@ -249,6 +263,19 @@ macro(jss_config_java)
     list(APPEND JSS_JAVAC_FLAGS "${JAVAC_CLASSPATH}")
     list(APPEND JSS_JAVAC_FLAGS "-sourcepath")
     list(APPEND JSS_JAVAC_FLAGS "${PROJECT_SOURCE_DIR}")
+
+    # Ensure we're compatible with JDK 8
+    list(APPEND JSS_JAVAC_FLAGS "-target")
+    list(APPEND JSS_JAVAC_FLAGS "1.8")
+    list(APPEND JSS_JAVAC_FLAGS "-source")
+    list(APPEND JSS_JAVAC_FLAGS "1.8")
+
+    # Handle passed-in javac flags as well; assume they are valid.
+    separate_arguments(PASSED_JAVAC_FLAGS UNIX_COMMAND "$ENV{JAVACFLAGS}")
+    foreach(PASSED_JAVAC_FLAG ${PASSED_JAVAC_FLAGS})
+        list(APPEND JSS_JAVAC_FLAGS "${PASSED_JAVAC_FLAG}")
+    endforeach()
+
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
         list(APPEND JSS_JAVAC_FLAGS "-g")
     else()
@@ -260,6 +287,19 @@ macro(jss_config_java)
     list(APPEND JSS_TEST_JAVAC_FLAGS "${JAVAC_CLASSPATH}:${JUNIT4_JAR}")
     list(APPEND JSS_TEST_JAVAC_FLAGS "-sourcepath")
     list(APPEND JSS_TEST_JAVAC_FLAGS "${PROJECT_SOURCE_DIR}")
+
+    # Ensure we're compatible with JDK 8
+    list(APPEND JSS_TEST_JAVAC_FLAGS "-target")
+    list(APPEND JSS_TEST_JAVAC_FLAGS "1.8")
+    list(APPEND JSS_TEST_JAVAC_FLAGS "-source")
+    list(APPEND JSS_TEST_JAVAC_FLAGS "1.8")
+
+    # Handle passed-in javac flags as well; assume they are valid.
+    separate_arguments(PASSED_JAVAC_FLAGS UNIX_COMMAND "$ENV{JAVACFLAGS}")
+    foreach(PASSED_JAVAC_FLAG ${PASSED_JAVAC_FLAGS})
+        list(APPEND JSS_TEST_JAVAC_FLAGS "${PASSED_JAVAC_FLAG}")
+    endforeach()
+
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
         list(APPEND JSS_TEST_JAVAC_FLAGS "-g")
     else()
@@ -269,7 +309,7 @@ macro(jss_config_java)
     # Variables for javadoc building. Note that JSS_PACKAGES needs to be
     # updated whenever a new package is created.
     set(JSS_WINDOW_TITLE "JSS: Java Security Services")
-    set(JSS_PACKAGES "org.mozilla.jss;org.mozilla.jss.asn1;org.mozilla.jss.crypto;org.mozilla.jss.pkcs7;org.mozilla.jss.pkcs10;org.mozilla.jss.pkcs11;org.mozilla.jss.pkcs12;org.mozilla.jss.pkix.primitive;org.mozilla.jss.pkix.cert;org.mozilla.jss.pkix.cmc;org.mozilla.jss.pkix.cmmf;org.mozilla.jss.pkix.cms;org.mozilla.jss.pkix.crmf;org.mozilla.jss.provider.java.security;org.mozilla.jss.provider.javax.crypto;org.mozilla.jss.SecretDecoderRing;org.mozilla.jss.ssl;org.mozilla.jss.util")
+    set(JSS_PACKAGES "org.mozilla.jss;org.mozilla.jss.asn1;org.mozilla.jss.crypto;org.mozilla.jss.pkcs7;org.mozilla.jss.pkcs10;org.mozilla.jss.pkcs11;org.mozilla.jss.pkcs12;org.mozilla.jss.pkix.primitive;org.mozilla.jss.pkix.cert;org.mozilla.jss.pkix.cmc;org.mozilla.jss.pkix.cmmf;org.mozilla.jss.pkix.cms;org.mozilla.jss.pkix.crmf;org.mozilla.jss.provider.java.security;org.mozilla.jss.provider.javax.crypto;org.mozilla.jss.SecretDecoderRing;org.mozilla.jss.ssl;org.mozilla.jss.util;org.mozilla.jss.netscape.security.util;org.mozilla.jss.netscape.security.extensions;org.mozilla.jss.netscape.security.acl;org.mozilla.jss.netscape.security.pkcs;org.mozilla.jss.netscape.security.x509;org.mozilla.jss.netscape.security.provider;org.mozilla.jss.nss;org.mozilla.jss.ssl.javax")
 
     set(JSS_BASE_PORT 2876)
     math(EXPR JSS_TEST_PORT_CLIENTAUTH ${JSS_BASE_PORT}+0)

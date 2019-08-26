@@ -236,7 +236,30 @@ public final class JSSProvider extends java.security.Provider {
         put("Mac.HmacSHA512",
             "org.mozilla.jss.provider.javax.crypto.JSSMacSpi$HmacSHA512");
         put("Alg.Alias.Mac.Hmac-SHA512", "HmacSHA512");
+        put("Alg.Alias.Mac.SHA-1-HMAC", "HmacSHA1");
+        put("Alg.Alias.Mac.SHA-256-HMAC", "HmacSHA256");
+        put("Alg.Alias.Mac.SHA-384-HMAC", "HmacSHA384");
+        put("Alg.Alias.Mac.SHA-512-HMAC", "HmacSHA512");
 
+
+        /////////////////////////////////////////////////////////////
+        // KeyManagerFactory
+        /////////////////////////////////////////////////////////////
+        put("KeyManagerFactory.NssX509",
+            "org.mozilla.jss.provider.javax.crypto.JSSKeyManagerFactory");
+        put("Alg.Alias.KeyManagerFactory.SunX509", "NssX509");
+        put("Alg.Alias.KeyManagerFactory.PKIX", "SunX509");
+
+
+        /////////////////////////////////////////////////////////////
+        // TrustManagerFactory
+        /////////////////////////////////////////////////////////////
+        put("TrustManagerFactory.NssX509",
+            "org.mozilla.jss.provider.javax.crypto.JSSTrustManagerFactory");
+        put("Alg.Alias.TrustManagerFactory.SunX509", "NssX509");
+        put("Alg.Alias.TrustManagerFactory.PKIX", "NssX509");
+        put("Alg.Alias.TrustManagerFactory.X509", "NssX509");
+        put("Alg.Alias.TrustManagerFactory.X.509", "NssX509");
     }
 
     public String toString() {

@@ -6,7 +6,7 @@ package org.mozilla.jss.crypto;
 import java.security.NoSuchAlgorithmException;
 import java.util.Hashtable;
 
-public interface SymmetricKey {
+public interface SymmetricKey extends javax.crypto.SecretKey {
 
     public static final Type DES = Type.DES;
     public static final Type DES3 = Type.DES3;
@@ -63,6 +63,14 @@ public interface SymmetricKey {
         public static final Type RC4 = new Type("RC4", KeyGenAlgorithm.RC4);
         public static final Type RC2 = new Type("RC2", KeyGenAlgorithm.RC2);
         public static final Type SHA1_HMAC = new Type("SHA1_HMAC",
+            KeyGenAlgorithm.SHA1_HMAC);
+        public static final Type SHA256_HMAC = new Type("SHA256_HMAC",
+            KeyGenAlgorithm.SHA256_HMAC);
+        public static final Type SHA384_HMAC = new Type("SHA384_HMAC",
+            KeyGenAlgorithm.SHA384_HMAC);
+        public static final Type SHA512_HMAC = new Type("SHA512_HMAC",
+            KeyGenAlgorithm.SHA512_HMAC);
+        public static final Type PBA_SHA1_HMAC = new Type("PBA_SHA1_HMAC",
             KeyGenAlgorithm.PBA_SHA1_HMAC);
         public static final Type AES = new Type("AES", KeyGenAlgorithm.AES);
 

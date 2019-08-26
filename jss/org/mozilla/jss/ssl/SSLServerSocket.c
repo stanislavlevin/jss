@@ -180,9 +180,7 @@ Java_org_mozilla_jss_ssl_SSLServerSocket_configServerSessionIDCache(
     const char* dirName = NULL;
     SECStatus status;
 
-    if (nameString != NULL) {
-        dirName = (*env)->GetStringUTFChars(env, nameString, NULL);
-    }
+    dirName = JSS_RefJString(env, nameString);
 
     status = SSL_ConfigServerSessionIDCache(
                 maxEntries, ssl2Timeout, ssl3Timeout, dirName);
@@ -193,9 +191,7 @@ Java_org_mozilla_jss_ssl_SSLServerSocket_configServerSessionIDCache(
     }
 
 finish:
-    if(dirName != NULL) {
-        (*env)->ReleaseStringUTFChars(env, nameString, dirName);
-    }
+    JSS_DerefJString(env, nameString, dirName);
 }
 
 /*
@@ -220,7 +216,6 @@ Java_org_mozilla_jss_ssl_SSLServerSocket_setServerCert(
     CERTCertificate* cert=NULL;
     PK11SlotInfo* slot=NULL;
     SECKEYPrivateKey* privKey=NULL;
-    SSLKEAType certKEA;
     SECStatus status;
 
     if( certObj == NULL ) {
@@ -241,8 +236,7 @@ Java_org_mozilla_jss_ssl_SSLServerSocket_setServerCert(
 
     privKey = PK11_FindPrivateKeyFromCert(slot, cert, NULL);
     if (privKey != NULL) {
-        certKEA = NSS_FindCertKEAType(cert);
-        status = SSL_ConfigSecureServer(sock->fd, cert, privKey, certKEA); 
+        status = SSL_ConfigServerCert(sock->fd, cert, privKey, NULL, 0);
         if( status != SECSuccess) {
             JSSL_throwSSLSocketException(env,
                 "Failed to configure secure server certificate and key");

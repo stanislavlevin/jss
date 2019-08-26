@@ -529,21 +529,15 @@ finish:
     /*
 	 * Free native objects
 	 */
-    if(szSsopw) {
-		if(ssoIsCopy) {
-			JSS_wipeCharArray(szSsopw);
-		}
-		/* JNI_ABORT means don't copy back changes */
-		(*env)->ReleaseByteArrayElements(env, ssopw, (jbyte*)szSsopw,
-										JNI_ABORT);
+    if (szSsopw && ssoIsCopy) {
+        JSS_wipeCharArray(szSsopw);
     }
-    if(szUserpw) {
-		if(userIsCopy) {
-			JSS_wipeCharArray(szUserpw);
-		}
-		(*env)->ReleaseByteArrayElements(env, userpw, (jbyte*)szUserpw,
-										JNI_ABORT);
+    JSS_DerefByteArray(env, ssopw, szSsopw, JNI_ABORT);
+
+    if (szUserpw && userIsCopy) {
+        JSS_wipeCharArray(szUserpw);
     }
+    JSS_DerefByteArray(env, userpw, szUserpw, JNI_ABORT);
 
     return;
 }
@@ -640,21 +634,15 @@ JNIEXPORT void JNICALL Java_org_mozilla_jss_pkcs11_PK11Token_changePassword
 
 finish:
     /* Free native objects */
-    if(szOldPIN) {
-		if(oldIsCopy) {
-			JSS_wipeCharArray(szOldPIN);
-		}
-		/* JNI_ABORT means don't copy back changes */
-        (*env)->ReleaseByteArrayElements(env, oldPIN, (jbyte*)szOldPIN,
-										JNI_ABORT);
+    if(szOldPIN && oldIsCopy) {
+        JSS_wipeCharArray(szOldPIN);
     }
-    if(szNewPIN) {
-		if(newIsCopy) {
-			JSS_wipeCharArray(szNewPIN);
-		}
-        (*env)->ReleaseByteArrayElements(env, newPIN, (jbyte*)szNewPIN,
-										JNI_ABORT);
+    JSS_DerefByteArray(env, oldPIN, szOldPIN, JNI_ABORT);
+
+    if(szNewPIN && newIsCopy) {
+        JSS_wipeCharArray(szNewPIN);
     }
+    JSS_DerefByteArray(env, newPIN, szNewPIN, JNI_ABORT);
 
     return;
 }
@@ -717,14 +705,11 @@ passwordIsCorrect
 
 finish:
 	/* Free native objects */
-	if(pwBytes != NULL) {
-		if(isCopy) {
-			JSS_wipeCharArray(pwBytes);
-		}
-		/* JNI_ABORT means don't copy back changes */
-		(*env)->ReleaseByteArrayElements(env, password, (jbyte*)pwBytes,
-											JNI_ABORT);
+	if (pwBytes && isCopy) {
+		JSS_wipeCharArray(pwBytes);
 	}
+	/* JNI_ABORT means don't copy back changes */
+	JSS_DerefByteArray(env, password, pwBytes, JNI_ABORT);
 
 	return pwIsCorrect;
 }
@@ -930,19 +915,17 @@ JNIEXPORT jstring JNICALL Java_org_mozilla_jss_pkcs11_PK11Token_generatePK10
 {
     PK11SlotInfo *slot;
     const char* c_subject=NULL;
-    jboolean isCopy = JNI_FALSE;
     unsigned char *b64request=NULL;
     SECItem p, q, g;
     PQGParams *dsaParams=NULL;
     const char* c_keyType;
-    jboolean k_isCopy = JNI_FALSE;
     SECOidTag signType = SEC_OID_UNKNOWN;
     PK11RSAGenParams rsaParams;
     void *params = NULL;
 
     PR_ASSERT(env!=NULL && this!=NULL);
     /* get keytype */
-    c_keyType = (*env)->GetStringUTFChars(env, keyType, &k_isCopy);
+    c_keyType = JSS_RefJString(env, keyType);
 
     if (0 == PL_strcasecmp(c_keyType, KEYTYPE_RSA_STRING)) {
       signType = SEC_OID_PKCS1_MD5_WITH_RSA_ENCRYPTION;
@@ -999,21 +982,17 @@ JNIEXPORT jstring JNICALL Java_org_mozilla_jss_pkcs11_PK11Token_generatePK10
     }
 
     /* get subject */
-    c_subject = (*env)->GetStringUTFChars(env, subject, &isCopy);
+    c_subject = JSS_RefJString(env, subject);
 
     /* call GenerateCertRequest() */
     GenerateCertRequest(env, signType, c_subject, slot, &b64request, params);
 
 finish:
-    if (isCopy == JNI_TRUE) {
-      /* release memory */
-      (*env)->ReleaseStringUTFChars(env, subject, c_subject);
-    }
+    /* release memory */
+    JSS_DerefJString(env, subject, c_subject);
 
-    if (k_isCopy == JNI_TRUE) {
-      /* release memory */
-      (*env)->ReleaseStringUTFChars(env, keyType, c_keyType);
-    }
+    /* release memory */
+    JSS_DerefJString(env, keyType, c_keyType);
 
     if (signType == SEC_OID_ANSIX9_DSA_SIGNATURE_WITH_SHA1_DIGEST) {
       SECITEM_FreeItem(&p, PR_FALSE);

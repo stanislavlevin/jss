@@ -13,8 +13,8 @@ stages:
   - extra
 
 env:
-  - BASE_IMAGE="fedora_28"
   - BASE_IMAGE="fedora_29"
+  - BASE_IMAGE="fedora_30"
 
 script:
   - bash tools/run_container.sh "$BASE_IMAGE"
@@ -32,6 +32,10 @@ matrix:
       env: BASE_IMAGE="fedora_29_jdk11"
     - stage: extra
       env: BASE_IMAGE="fedora_rawhide"
+    - stage: extra
+      env: BASE_IMAGE="fast_finish"
+      script:
+        - "true"
   allow_failures:
     - stage: extra
       env: BASE_IMAGE="pkcs11check"

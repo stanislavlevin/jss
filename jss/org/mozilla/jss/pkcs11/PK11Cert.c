@@ -291,7 +291,7 @@ findSlotByTokenNameAndCert(char *name, CERTCertificate *cert)
  * key slot (which contains the permanent database token) is returned.
  */
 CERTCertificate *
-JSS_PK11_findCertAndSlotFromNickname(char *nickname, void *wincx,
+JSS_PK11_findCertAndSlotFromNickname(const char *nickname, void *wincx,
     PK11SlotInfo **ppSlot)
 {
     CERTCertificate *cert;
@@ -465,6 +465,80 @@ JSS_PK11_wrapCert(JNIEnv *env, CERTCertificate **cert)
 		slot = PK11_ReferenceSlot(slot);
 	}
 	return JSS_PK11_wrapCertAndSlot(env, cert, &slot);
+}
+
+static ssize_t
+CERT_LIST_COUNT(CERTCertList *chain) {
+    ssize_t count = -1;
+    CERTCertListNode *node = NULL;
+
+    if (chain == NULL) {
+        return count;
+    }
+
+    for (node = CERT_LIST_HEAD(chain);
+            !CERT_LIST_END(node, chain);
+            node = CERT_LIST_NEXT(node)) {
+        count += 1;
+    }
+
+    return count + 1;
+}
+
+/****************************************************************
+ *
+ * J S S _ P K 1 1 _ w r a p C e r t C h a i n
+ *
+ * Builds an array of PK11Cert objects from a CERTCertList.
+ * ppChain: Pointer to pointer to CERTCertList.  The CERTCertList
+ *      will be wrapped in a Java certificate.  If this fails, it
+ *      will be deleted.  In any case, the caller should never worry about,
+ *      or use, this CERTCertList again. To enforce this, *ppChain
+ *      will be set to NULL whether the functions fails or succeeds.
+ * Returns: a new Java PK11Cert[] object, or NULL if an exception was thrown.
+ */
+jobjectArray
+JSS_PK11_wrapCertChain(JNIEnv *env, CERTCertList **chain)
+{
+    jobjectArray result = NULL;
+    jobject wrappedCert = NULL;
+    CERTCertListNode *node = NULL;
+    ssize_t count = 0;
+
+    if (chain == NULL || *chain == NULL) {
+        goto done;
+    }
+
+    // Since we can't easily resize our jobjectArray once created, walk the
+    // chain and count its length.
+    count = CERT_LIST_COUNT(*chain);
+    if (count <= 0) {
+        goto done;
+    }
+
+    // Allocate our result structure.
+    result = (*env)->NewObjectArray(env, count,
+                                    (*env)->FindClass(env, CERT_CLASS_NAME),
+                                    NULL);
+    count = 0;
+
+    for (node = CERT_LIST_HEAD((*chain));
+            !CERT_LIST_END(node, (*chain));
+            node = CERT_LIST_NEXT(node)) {
+        // Wrap the certificate and insert it into the array.
+        wrappedCert = JSS_PK11_wrapCert(env, &node->cert);
+        (*env)->SetObjectArrayElement(env, result, count, wrappedCert);
+        count += 1;
+    }
+
+
+done:
+    if (chain) {
+        CERT_DestroyCertList(*chain);
+        *chain = NULL;
+    }
+
+    return result;
 }
 
 /**********************************************************************

@@ -179,7 +179,7 @@ JSS_PK11_getCertSlotPtr(JNIEnv *env, jobject certObject, PK11SlotInfo **ptr);
  * key slot (which contains the permanent database token) is returned.
  */
 CERTCertificate *
-JSS_PK11_findCertAndSlotFromNickname(char *nickname, void *wincx,
+JSS_PK11_findCertAndSlotFromNickname(const char *nickname, void *wincx,
     PK11SlotInfo **ppSlot);
 
 
@@ -263,6 +263,22 @@ JSS_PK11_wrapCertAndSlot(JNIEnv *env, CERTCertificate **ppCert,
  */
 jobject
 JSS_PK11_wrapCert(JNIEnv *env, CERTCertificate **ppCert);
+
+
+/****************************************************************
+ *
+ * J S S _ P K 1 1 _ w r a p C e r t C h a i n
+ *
+ * Builds an array of PK11Cert objects from a CERTCertList.
+ * ppChain: Pointer to pointer to CERTCertList.  The CERTCertList
+ *      will be wrapped in a Java certificate.  If this fails, it
+ *      will be deleted.  In any case, the caller should never worry about,
+ *      or use, this CERTCertList again. To enforce this, *ppChain
+ *      will be set to NULL whether the functions fails or succeeds.
+ * Returns: a new Java PK11Cert[] object, or NULL if an exception was thrown.
+ */
+jobjectArray
+JSS_PK11_wrapCertChain(JNIEnv *env, CERTCertList **ppChain);
 
 
 /*=====================================================================
@@ -509,6 +525,14 @@ JSS_PK11_closeSession(PK11SlotInfo *slot, CK_SESSION_HANDLE session,
  */
 char*
 JSS_PK11_getErrorString(CK_RV crv);
+
+/***********************************************************************
+ *
+ * getSupportedWrappingMechanism
+ *
+ * Returns a 
+ */
+CK_MECHANISM_TYPE getSupportedWrappingMechanism(JNIEnv *env, jobject algObj, PK11SlotInfo *slot);
 
 
 PR_END_EXTERN_C

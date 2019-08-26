@@ -150,13 +150,10 @@ Java_org_mozilla_jss_pkcs11_PK11Signature_engineUpdateNative
     PR_ASSERT(ctxt != NULL);
 
     /* Get the bytes to be updated */
-    bytes = (*env)->GetByteArrayElements(env, bArray, NULL);
-    if(bytes==NULL) {
+    if (!JSS_RefByteArray(env, bArray, &bytes, &numBytes)) {
         ASSERT_OUTOFMEM(env);
         goto finish;
     }
-    numBytes = (*env)->GetArrayLength(env, bArray);
-    PR_ASSERT(numBytes > 0);
 
     if( offset < 0 || offset >= numBytes || length < 0 ||
             (offset+length) > numBytes || (offset+length) < 0 )
@@ -186,9 +183,7 @@ Java_org_mozilla_jss_pkcs11_PK11Signature_engineUpdateNative
     }
 
 finish:
-    if(bytes!=NULL) {
-        (*env)->ReleaseByteArrayElements(env, bArray, bytes, JNI_ABORT);
-    }
+    JSS_DerefByteArray(env, bArray, bytes, JNI_ABORT);
 }
 
 
@@ -274,13 +269,10 @@ Java_org_mozilla_jss_pkcs11_PK11Signature_engineVerifyNative
 	/*
 	 * Convert signature to SECItem
 	 */
-	sigItem.data = (unsigned char*)
-						(*env)->GetByteArrayElements(env, sigArray, 0);
-	if(sigItem.data == NULL) {
+	if (!JSS_RefByteArray(env, sigArray, (jbyte **) &sigItem.data, (jsize *) &sigItem.len)) {
 		ASSERT_OUTOFMEM(env);
 		goto finish;
 	}
-	sigItem.len = (*env)->GetArrayLength(env, sigArray);
 
 	/*
 	 * Finish the verification operation
@@ -295,12 +287,7 @@ Java_org_mozilla_jss_pkcs11_PK11Signature_engineVerifyNative
 	}
 
 finish:
-	if(sigItem.data!=NULL) {
-		(*env)->ReleaseByteArrayElements(	env,
-											sigArray,
-											(jbyte*)sigItem.data,
-											JNI_ABORT);
-	}
+	JSS_DerefByteArray(env, sigArray, sigItem.data, JNI_ABORT);
 	return verified;
 }
 

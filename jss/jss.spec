@@ -6,18 +6,17 @@ Summary:        Java Security Services (JSS)
 URL:            http://www.dogtagpki.org/wiki/JSS
 License:        MPLv1.1 or GPLv2+ or LGPLv2+
 
-Version:        4.5.3
+Version:        4.6.1
 Release:        1%{?_timestamp}%{?_commit_id}%{?dist}
 # global         _phase -a1
 
 # To generate the source tarball:
 # $ git clone https://github.com/dogtagpki/jss.git
 # $ cd jss
-# $ git archive \
-#     --format=tar.gz \
-#     --prefix jss-VERSION/ \
-#     -o jss-VERSION.tar.gz \
-#     <version tag>
+# $ git tag v4.5.<z>
+# $ git push origin v4.5.<z>
+# Then go to https://github.com/dogtagpki/jss/releases and download the source
+# tarball.
 Source:         https://github.com/dogtagpki/%{name}/archive/v%{version}%{?_phase}/%{name}-%{version}%{?_phase}.tar.gz
 
 # To create a patch for all changes since a version tag:
@@ -52,12 +51,7 @@ BuildRequires:  slf4j-jdk14
 BuildRequires:  apache-commons-lang
 BuildRequires:  apache-commons-codec
 
-%if 0%{?fedora} >= 25 || 0%{?rhel} > 7
-BuildRequires:  perl-interpreter
-%endif
-
 BuildRequires:  junit
-BuildRequires:  hamcrest
 
 Requires:       nss >= 3.30
 Requires:       java-headless
@@ -112,6 +106,9 @@ export BUILD_OPT=1
 CFLAGS="-g $RPM_OPT_FLAGS"
 export CFLAGS
 
+# Check if we're in FIPS mode
+modutil -dbdir /etc/pki/nssdb -chkfips true | grep -q enabled && export FIPS_ENABLED=1
+
 # The Makefile is not thread-safe
 rm -rf build && mkdir -p build && cd build
 %cmake \
@@ -119,7 +116,8 @@ rm -rf build && mkdir -p build && cd build
     -DJAVA_LIB_INSTALL_DIR=%{_jnidir} \
     ..
 
-%{__make} all javadoc
+%{__make} all
+%{__make} javadoc || true
 ctest --output-on-failure
 
 ################################################################################

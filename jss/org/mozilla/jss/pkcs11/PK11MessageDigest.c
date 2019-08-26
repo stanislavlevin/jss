@@ -111,15 +111,15 @@ Java_org_mozilla_jss_pkcs11_PK11MessageDigest_update
 
     PK11Context *context = NULL;
     jbyte* bytes = NULL;
+    jsize length = 0;
 
     if( JSS_PK11_getCipherContext(env, proxyObj, &context) != PR_SUCCESS ) {
         /* exception was thrown */
         goto finish;
     }
 
-    PR_ASSERT( (*env)->GetArrayLength(env, inbufBA) >= offset+len );
-    bytes = (*env)->GetByteArrayElements(env, inbufBA, NULL);
-    if( bytes == NULL ) {
+    if (!JSS_RefByteArray(env, inbufBA, &bytes, &length) ||
+            length < offset+len) {
         ASSERT_OUTOFMEM(env);
         goto finish;
     }
@@ -132,9 +132,7 @@ Java_org_mozilla_jss_pkcs11_PK11MessageDigest_update
     }
 
 finish:
-    if(bytes) {
-        (*env)->ReleaseByteArrayElements(env, inbufBA, bytes, JNI_ABORT);
-    }
+    JSS_DerefByteArray(env, inbufBA, bytes, JNI_ABORT);
 }
 
 
@@ -150,6 +148,7 @@ Java_org_mozilla_jss_pkcs11_PK11MessageDigest_digest
 {
     PK11Context *context=NULL;
     jbyte *bytes=NULL;
+    jsize length = 0;
     SECStatus status;
     unsigned int outLen = 0;
 
@@ -158,9 +157,8 @@ Java_org_mozilla_jss_pkcs11_PK11MessageDigest_digest
         goto finish;
     }
 
-    PR_ASSERT( (*env)->GetArrayLength(env, outbuf) >= offset+len );
-    bytes = (*env)->GetByteArrayElements(env, outbuf, NULL);
-    if( bytes == NULL ) {
+    if (!JSS_RefByteArray(env, outbuf, &bytes, &length) ||
+            length < offset+len) {
         ASSERT_OUTOFMEM(env);
         goto finish;
     }
@@ -174,8 +172,6 @@ Java_org_mozilla_jss_pkcs11_PK11MessageDigest_digest
     }
 
 finish:
-    if(bytes) {
-        (*env)->ReleaseByteArrayElements(env, outbuf, bytes, 0);
-    }
+    JSS_DerefByteArray(env, outbuf, bytes, 0);
     return outLen;
 }

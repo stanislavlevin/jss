@@ -15,6 +15,7 @@
 #include <pk11util.h>
 #include "_jni/org_mozilla_jss_ssl_SSLSocket.h"
 #include "jssl.h"
+#include "cert.h"
 
 #ifdef WIN32
 #include <winsock.h>
@@ -170,9 +171,11 @@ Java_org_mozilla_jss_ssl_SocketBase_socketCreate(JNIEnv *env, jobject self,
         const char *chars;
         int retval;
         PR_ASSERT( javaSock != NULL );
-        chars = (*env)->GetStringUTFChars(env, host, NULL);
+
+        chars = JSS_RefJString(env, host);
         retval = SSL_SetURL(sockdata->fd, chars);
-        (*env)->ReleaseStringUTFChars(env, host, chars);
+        JSS_DerefJString(env, host, chars);
+
         if( retval ) {
             JSSL_throwSSLSocketException(env,
                 "Failed to set SSL domain name");
@@ -413,6 +416,21 @@ PRInt32 JSSL_enums[] = {
     0
 };
 
+/*
+ * Reverses the above table mapping enum value -> NSS constant.
+ */
+int JSSL_enums_reverse(PRInt32 value)
+{
+    int index = 0;
+    for (index = 0; index < JSSL_enums_size; index++) {
+        if (JSSL_enums[index] == value) {
+            return index;
+        }
+    }
+
+    return index;
+}
+
 JNIEXPORT void JNICALL
 Java_org_mozilla_jss_ssl_SocketBase_socketBind
     (JNIEnv *env, jobject self, jbyteArray addrBA, jint port)
@@ -458,16 +476,13 @@ Java_org_mozilla_jss_ssl_SocketBase_socketBind
 
     memset( &addr, 0, sizeof( PRNetAddr ));
 
-    if( addrBA != NULL ) {
-        addrBAelems = (*env)->GetByteArrayElements(env, addrBA, NULL);
-        addrBALen = (*env)->GetArrayLength(env, addrBA);
-
-        if( addrBAelems == NULL ) {
+    if (addrBA != NULL) {
+        if (!JSS_RefByteArray(env, addrBA, &addrBAelems, &addrBALen)) {
             ASSERT_OUTOFMEM(env);
             goto finish;
         }
 
-        if(addrBALen != 4 && addrBALen != 16) {
+        if (addrBALen != 4 && addrBALen != 16) {
             JSS_throwMsgPrErr(env, BIND_EXCEPTION,
             "Invalid address in bind!");
              goto finish;
@@ -512,9 +527,7 @@ Java_org_mozilla_jss_ssl_SocketBase_socketBind
     }       
 
 finish:
-    if( addrBAelems != NULL ) {
-        (*env)->ReleaseByteArrayElements(env, addrBA, addrBAelems, JNI_ABORT);
-    }
+    JSS_DerefByteArray(env, addrBA, addrBAelems, JNI_ABORT);
 }
 
 /*
@@ -888,4 +901,210 @@ finish:
         int VARIABLE_MAY_NOT_BE_USED ret = (*env)->Throw(env, currentExcep);
         PR_ASSERT(ret == 0);
     }
+}
+
+/* Get the trusted anchor for pkix */
+
+CERTCertificate *getRoot(CERTCertificate *cert,
+    SECCertUsage certUsage) 
+{
+    CERTCertificate  *root = NULL;
+    CERTCertListNode *node = NULL;
+    CERTCertList *certList = NULL;
+
+    if (!cert) {
+        goto finish;
+    }
+
+    certList = CERT_GetCertChainFromCert(cert, PR_Now(), certUsage);
+
+    if (certList == NULL) {
+        goto finish;
+    }
+
+    for (node = CERT_LIST_HEAD(certList);
+       !CERT_LIST_END(node, certList);
+       node = CERT_LIST_NEXT(node)) {
+       
+        /* try to find the root */
+       if( node->cert && node->cert->isRoot ) {
+          root = CERT_DupCertificate(node->cert) ;
+       } 
+    }
+
+finish:
+  
+    CERT_DestroyCertList(certList);
+    return root; 
+}
+
+/* Verify a cert using explicit PKIX call.
+ * For now only used in OCSP AIA context.
+ * The result of this call will be a full chain
+ * and leaf network AIA ocsp validation.
+ * The policy param will be used in the future to
+ * handle more scenarios.
+ */
+
+SECStatus JSSL_verifyCertPKIX(CERTCertificate *cert,
+      SECCertificateUsage certificateUsage,secuPWData *pwdata, int ocspPolicy,
+      CERTVerifyLog *log, SECCertificateUsage *usage) 
+{
+
+    /* put the first set of possible flags internally here first */
+    /* later there could be a more complete list to choose from */
+    /* support our hard core fetch aia ocsp policy for now */
+
+    static PRUint64 ocsp_Enabled_Hard_Policy_LeafFlags[2] = {
+        /* crl */
+        0,
+        /* ocsp */
+        CERT_REV_M_TEST_USING_THIS_METHOD |
+        CERT_REV_M_FAIL_ON_MISSING_FRESH_INFO
+    };
+
+    static PRUint64 ocsp_Enabled_Hard_Policy_ChainFlags[2] = {
+        /* crl */
+        0,
+        /* ocsp */
+        CERT_REV_M_TEST_USING_THIS_METHOD |
+        CERT_REV_M_FAIL_ON_MISSING_FRESH_INFO
+    };
+
+    static CERTRevocationMethodIndex
+        ocsp_Enabled_Hard_Policy_Method_Preference = {
+            cert_revocation_method_ocsp
+        };
+
+    static CERTRevocationFlags ocsp_Enabled_Hard_Policy = {
+    { /* leafTests */
+      2,
+      ocsp_Enabled_Hard_Policy_LeafFlags,
+      1,
+      &ocsp_Enabled_Hard_Policy_Method_Preference,
+      0 },
+    { /* chainTests */
+      2,
+      ocsp_Enabled_Hard_Policy_ChainFlags,
+      1,
+      &ocsp_Enabled_Hard_Policy_Method_Preference,
+      0 }
+    };
+
+    /* for future expansion */
+
+    CERTValOutParam cvout[20] = {{0}};
+    CERTValInParam cvin[20] = {{0}};
+
+    int inParamIndex = 0;
+    int outParamIndex = 0;
+    CERTRevocationFlags *rev = NULL;
+
+    CERTCertList *trustedCertList = NULL;
+
+    PRBool fetchCerts = PR_FALSE;
+
+    SECCertUsage certUsage = certUsageSSLClient /* 0 */;
+    
+    SECStatus res =  SECFailure;
+
+    CERTCertificate *root = NULL;
+
+    if(cert == NULL) {
+        goto finish;
+    }
+
+    if (ocspPolicy != OCSP_LEAF_AND_CHAIN_POLICY) {
+        goto finish;
+    }
+
+    /* Force the strict ocsp network check on chain
+       and leaf.
+    */
+
+    fetchCerts = PR_TRUE;   
+    rev = &ocsp_Enabled_Hard_Policy;
+
+    /* fetch aia over net */
+ 
+    cvin[inParamIndex].type = cert_pi_useAIACertFetch;
+    cvin[inParamIndex].value.scalar.b = fetchCerts;
+    inParamIndex++; 
+
+    /* time */
+
+    cvin[inParamIndex].type = cert_pi_date;
+    cvin[inParamIndex].value.scalar.time = PR_Now();
+    inParamIndex++;
+
+    /* flags */
+
+    cvin[inParamIndex].type = cert_pi_revocationFlags;
+    cvin[inParamIndex].value.pointer.revocation = rev;
+    inParamIndex++;
+
+    /* establish trust anchor */
+
+    /* We need to convert the SECCertificateUsage to a SECCertUsage to obtain
+     * the root.
+    */
+
+    SECCertificateUsage testUsage = certificateUsage;
+    while (0 != (testUsage = testUsage >> 1)) { certUsage++; }
+
+    root = getRoot(cert,certUsage);
+
+    /* Try to add the root as the trust anchor so all the
+       other memebers of the ca chain will get validated.
+    */
+
+    if( root != NULL ) {
+        trustedCertList = CERT_NewCertList();
+        CERT_AddCertToListTail(trustedCertList, root);        
+
+        cvin[inParamIndex].type = cert_pi_trustAnchors;
+        cvin[inParamIndex].value.pointer.chain = trustedCertList;
+
+        inParamIndex++;
+    }
+
+    cvin[inParamIndex].type = cert_pi_end;
+
+    if(log != NULL) {
+        cvout[outParamIndex].type = cert_po_errorLog;
+        cvout[outParamIndex].value.pointer.log = log;
+        outParamIndex ++;
+    }
+
+    int usageIndex = 0;
+    if(usage != NULL) {
+        usageIndex = outParamIndex;
+        cvout[outParamIndex].type = cert_po_usages;
+        cvout[outParamIndex].value.scalar.usages = 0;
+        outParamIndex ++;
+    }
+
+    cvout[outParamIndex].type = cert_po_end;
+
+    res = CERT_PKIXVerifyCert(cert, certificateUsage, cvin, cvout, &pwdata);
+
+finish:
+    /* clean up any trusted cert list */
+
+    if (trustedCertList) {
+        CERT_DestroyCertList(trustedCertList);
+        trustedCertList = NULL;
+    }
+
+    /* CERT_DestroyCertList destroys interior certs for us. */
+
+    if(root) {
+       root = NULL;
+    }
+
+    if(res == SECSuccess && usage) {
+        *usage = cvout[usageIndex].value.scalar.usages;
+    }
+
+    return res;
 }

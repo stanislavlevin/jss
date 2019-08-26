@@ -33,8 +33,8 @@
 **      return -1;
 */
 void
-JSS_throwMsgPrErrArg(JNIEnv *env, char *throwableClassName, char *message,
-    PRErrorCode errCode)
+JSS_throwMsgPrErrArg(JNIEnv *env, const char *throwableClassName,
+    const char *message, PRErrorCode errCode)
 {
     const char *errStr = JSS_strerror(errCode);
     char *msg = NULL;
@@ -79,7 +79,9 @@ finish:
 **      return -1;
 */
 void
-JSS_throwMsg(JNIEnv *env, char *throwableClassName, char *message) {
+JSS_throwMsg(JNIEnv *env, const char *throwableClassName,
+    const char *message)
+{
 
     jclass throwableClass;
     jint VARIABLE_MAY_NOT_BE_USED result;
@@ -363,7 +365,7 @@ JSS_OctetStringToByteArray(JNIEnv *env, SECItem *item)
     /* now insert the rest of the bytes */
     memcpy(bytes+1, item->data, size-1);
 
-    (*env)->ReleaseByteArrayElements(env, array, bytes, 0);
+    JSS_DerefByteArray(env, array, bytes, 0);
 
     return array;
 }
@@ -420,9 +422,7 @@ JSS_ByteArrayToOctetString(JNIEnv *env, jbyteArray byteArray, SECItem *item)
     status = PR_SUCCESS;
 
 finish:
-    if(bytes) {
-        (*env)->ReleaseByteArrayElements(env, byteArray, bytes, JNI_ABORT);
-    }
+    JSS_DerefByteArray(env, byteArray, bytes, JNI_ABORT);
     if(status != PR_SUCCESS) {
         SECITEM_FreeItem(item, PR_FALSE);
     }
@@ -605,6 +605,150 @@ jbyteArray JSS_ToByteArray(JNIEnv *env, const void *data, int length)
     }
 
     return byteArray;
+}
+
+/************************************************************************
+** JSS_RefByteArray.
+**
+** References the contents of a Java ByteArray into *data, and optionally
+** records length information to *lenght. Must be dereferenced via calling
+** JSS_DerefByteArray.
+**
+** Returns
+**  bool - whether or not the operation succeeded. The operation succeeds
+**  if *data is successfully referenced (i.e., is non-null).
+*/
+bool JSS_RefByteArray(JNIEnv *env, jbyteArray array, jbyte **data,
+    jsize *length)
+{
+    bool ret = false;
+    jsize array_length = 0;
+
+    if (env == NULL || data == NULL) {
+        goto done;
+    }
+    *data = NULL;
+
+    if (array == NULL) {
+        goto done;
+    }
+
+    array_length = (*env)->GetArrayLength(env, array);
+    if (array_length <= 0) {
+        goto done;
+    }
+
+    *data = (*env)->GetByteArrayElements(env, array, NULL);
+    if (*data != NULL) {
+        ret = true;
+    }
+
+done:
+    if (length != NULL) {
+        *length = array_length;
+    }
+    return ret;
+}
+
+/************************************************************************
+** JSS_DerefByteArray.
+**
+** Dereferences the specified ByteArray and passed reference. mode is the
+** same as given to (*env)->ReleaseByteArrayElements: 0 for copy and free,
+** JNI_COMMIT for copy without freeing, and JNI_ABORT for free-only.
+**
+*/
+void JSS_DerefByteArray(JNIEnv *env, jbyteArray array, void *data, jint mode) {
+    if (env == NULL || array == NULL || data == NULL) {
+        return;
+    }
+    (*env)->ReleaseByteArrayElements(env, array, (jbyte *) data, mode);
+}
+
+/************************************************************************
+** JSS_FromByteArray.
+**
+** Converts the given chararacter array from a Java byte array into a array of
+** uint_t. When length is passed and is not NULL, *length is updated with the
+** length of the byte array. The actual allocated size of *data is one more
+** than *length to NULL terminate it. Note: *data must be freed with
+** free(*data) after use, not with (*env)->ReleaseByteArrayElements.
+**
+** Returns
+**  bool - whether or not the operation succeeded.
+*/
+bool JSS_FromByteArray(JNIEnv *env, jbyteArray array, uint8_t **data,
+    size_t *length)
+{
+    jsize array_length = 0;
+    jbyte *array_data = NULL;
+
+    if (env == NULL || array == NULL || data == NULL) {
+        return false;
+    }
+    *data = NULL;
+
+    if (!JSS_RefByteArray(env, array, &array_data, &array_length)) {
+        return false;
+    }
+
+    /* Defensive coding: Java's byte arrays are not null terminated, allocate
+     * a structure one larger to guarantee C functions work as expected. */
+    *data = calloc(array_length + 1, sizeof(uint8_t));
+    memcpy(*data, array_data, array_length);
+
+    // Copy length, if specified
+    if (length != NULL) {
+        *length = array_length;
+    }
+
+    // Give back our reference to array_data after destroying the contents.
+    JSS_DerefByteArray(env, array, array_data, JNI_ABORT);
+
+    return true;
+}
+
+/************************************************************************
+** JSS_RefJString
+**
+** Converts the given jstring object to a char *; must be freed with
+** JSS_DerefJString().
+**
+** Returns
+**  A reference to the characters underlying the given string.
+*/
+const char *JSS_RefJString(JNIEnv *env, jstring str) {
+    const char *result = NULL;
+    if (str == NULL) {
+        return result;
+    }
+
+    /* Saving is_copy is useless in most cases: according to the Java
+     * docs, we always have to call ReleaseStringUTFChars:
+     * https://docs.oracle.com/javase/8/docs/technotes/guides/jni/spec/functions.html */
+    result = (*env)->GetStringUTFChars(env, str, NULL);
+
+    /* We've received a NULL result out of a non-NULL input string. This
+     * means that the JNI code had an issue parsing the string as UTF8, so
+     * raise an exception. */
+    if (result == NULL) {
+        JSS_throwMsg(env, GENERAL_SECURITY_EXCEPTION,
+            "Unable to parse Java String as UTF-8.");
+    }
+
+    return result;
+}
+
+/************************************************************************
+** JSS_DerefJString
+**
+** Returns the reference given by the JVM to a jstring's contents.
+**
+*/
+void JSS_DerefJString(JNIEnv *env, jstring str, const char *ref) {
+    if (str != NULL && ref != NULL) {
+        (*env)->ReleaseStringUTFChars(env, str, ref);
+    }
 }
 
 /*
