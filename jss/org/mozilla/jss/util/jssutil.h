@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include <stdbool.h>
 
+#include <certt.h>
 #include <nspr.h>
 #include <jni.h>
 #include <secitem.h>
@@ -121,6 +122,18 @@ JSS_assertOutOfMem(JNIEnv *env);
 */
 PRStatus
 JSS_getPtrFromProxy(JNIEnv *env, jobject nativeProxy, void **ptr);
+
+/***********************************************************************
+**
+** J S S _ c l e a r P t r F r o m P r o x y
+**
+** Given a NativeProxy, clear the value of the pointer stored in it. This
+** helps to ensure that a double free doesn't occur.
+**
+** Returns: PR_SUCCESS on success, PR_FAILURE if an exception was thrown.
+*/
+PRStatus
+JSS_clearPtrFromProxy(JNIEnv *env, jobject nativeProxy);
 
 /***********************************************************************
 **
@@ -262,6 +275,9 @@ JSS_throwMsgPrErrArg(JNIEnv *env, const char *throwableClassName,
 #define JSS_throwMsgPrErr(e, cn, m) \
     JSS_throwMsgPrErrArg((e), (cn), (m), PR_GetError())
 
+#define JSS_throwMsgPortErr(e, cn, m) \
+    JSS_throwMsgPrErrArg((e), (cn), (m), PORT_GetError())
+
 /************************************************************************
 **
 ** J S S _ i n i t E r r c o d e T r a n s l a t i o n T a b l e.
@@ -350,6 +366,53 @@ const char *JSS_RefJString(JNIEnv *env, jstring str);
 **
 */
 void JSS_DerefJString(JNIEnv *env, jstring str, const char *ref);
+
+/************************************************************************
+** JSS_PK11_WrapCertToChain
+**
+** Inquires about the certificate chain for cert, and returns the full or
+** partial as a jobjectArray for use in JNI'd code.
+**
+*/
+jobjectArray JSS_PK11_WrapCertToChain(JNIEnv *env, CERTCertificate *cert,
+                                      SECCertUsage certUsage);
+
+/************************************************************************
+** JSS_ExceptionToSECStatus
+**
+** When the JNI has thrown a known exception, convert this to a SECStatus
+** code and set the appropriate PRErrorCode.
+**
+** The supported exceptions are:
+**  - CertificateException
+**
+*/
+SECStatus JSS_ExceptionToSECStatus(JNIEnv *env);
+
+/************************************************************************
+** JSS_SECStatusToException
+**
+** Convert a failing SECStatus and PRErrorCode combination into a raised
+** JNI exception.
+**
+** The supported exceptions are:
+**  - CertificateException
+**
+*/
+void JSS_SECStatusToException(JNIEnv *env, SECStatus result, PRErrorCode code);
+
+/************************************************************************
+** JSS_SECStatusToException
+**
+** Convert a failing SECStatus and PRErrorCode combination into a raised
+** JNI exception with the specified message.
+**
+** The supported exceptions are:
+**  - CertificateException
+**
+*/
+void JSS_SECStatusToExceptionMessage(JNIEnv *env, SECStatus result,
+                                     PRErrorCode code, const char *message);
 
 PR_END_EXTERN_C
 

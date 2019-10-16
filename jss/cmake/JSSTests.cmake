@@ -22,6 +22,10 @@ macro(jss_tests)
         COMMAND "cmake" "-E" "make_directory" "${RESULTS_DATA_OUTPUT_DIR}"
         DEPENDS "Clean_Data_Dir"
     )
+    jss_test_exec(
+        NAME "TestBufferPRFD"
+        COMMAND "${BIN_OUTPUT_DIR}/TestBufferPRFD"
+    )
 
     # Rather than creating our results directories earlier in JSSConfig,
     # create them here so that the test suite can be rerun multiple times.
@@ -235,6 +239,16 @@ macro(jss_tests)
         COMMAND "org.mozilla.jss.tests.JSSProvider" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
         DEPENDS "List_CA_certs"
     )
+    jss_test_java(
+        NAME "X509CertTest"
+        COMMAND "org.mozilla.jss.tests.X509CertTest" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
+        DEPENDS "List_CA_certs"
+    )
+    jss_test_java(
+        NAME "KeyStoreTest"
+        COMMAND "org.mozilla.jss.tests.KeyStoreTest" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}" getAliases
+        DEPENDS "List_CA_certs"
+    )
 
     if(NOT FIPS_ENABLED)
         jss_test_java(
@@ -247,6 +261,13 @@ macro(jss_tests)
             COMMAND "org.mozilla.jss.tests.HmacTest" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
             DEPENDS "Setup_DBs"
         )
+        if(HAVE_NSS_CMAC)
+            jss_test_java(
+                NAME "CMAC_Test"
+                COMMAND "org.mozilla.jss.tests.TestCmac" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
+                DEPENDS "Setup_DBs"
+            )
+        endif()
         jss_test_java(
             NAME "Mozilla_JSS_Secret_Key_Generation"
             COMMAND "org.mozilla.jss.tests.JCASymKeyGen" "${RESULTS_NSSDB_OUTPUT_DIR}"
@@ -255,14 +276,14 @@ macro(jss_tests)
 
         # SSL Engine related tests
         jss_test_exec(
-            NAME "TestBufferPRFD_RSA"
-            COMMAND "${BIN_OUTPUT_DIR}/TestBufferPRFD" "${RESULTS_NSSDB_OUTPUT_DIR}" "${DB_PWD}" "Server_RSA"
-            DEPENDS "List_CA_certs" "generate_c_TestBufferPRFD"
+            NAME "TestBufferPRFDSSL_RSA"
+            COMMAND "${BIN_OUTPUT_DIR}/TestBufferPRFDSSL" "${RESULTS_NSSDB_OUTPUT_DIR}" "${DB_PWD}" "Server_RSA"
+            DEPENDS "List_CA_certs" "generate_c_TestBufferPRFDSSL"
         )
         jss_test_exec(
-            NAME "TestBufferPRFD_ECDSA"
-            COMMAND "${BIN_OUTPUT_DIR}/TestBufferPRFD" "${RESULTS_NSSDB_OUTPUT_DIR}" "${DB_PWD}" "Server_ECDSA"
-            DEPENDS "List_CA_certs" "generate_c_TestBufferPRFD"
+            NAME "TestBufferPRFDSSL_ECDSA"
+            COMMAND "${BIN_OUTPUT_DIR}/TestBufferPRFDSSL" "${RESULTS_NSSDB_OUTPUT_DIR}" "${DB_PWD}" "Server_ECDSA"
+            DEPENDS "List_CA_certs" "generate_c_TestBufferPRFDSSL"
         )
         jss_test_java(
             NAME "JSS_Test_BufferPRFD"
@@ -342,6 +363,7 @@ macro(jss_tests_compile)
     jss_tests_compile_c("${PROJECT_SOURCE_DIR}/org/mozilla/jss/tests/buffer_size_1.c" "${BIN_OUTPUT_DIR}/buffer_size_1" "buffer_size_1")
     jss_tests_compile_c("${PROJECT_SOURCE_DIR}/org/mozilla/jss/tests/buffer_size_4.c" "${BIN_OUTPUT_DIR}/buffer_size_4" "buffer_size_4")
     jss_tests_compile_c("${PROJECT_SOURCE_DIR}/org/mozilla/jss/tests/TestBufferPRFD.c" "${BIN_OUTPUT_DIR}/TestBufferPRFD" "TestBufferPRFD")
+    jss_tests_compile_c("${PROJECT_SOURCE_DIR}/org/mozilla/jss/tests/TestBufferPRFDSSL.c" "${BIN_OUTPUT_DIR}/TestBufferPRFDSSL" "TestBufferPRFDSSL")
 endmacro()
 
 macro(jss_tests_compile_c C_FILE C_OUTPUT C_TARGET)

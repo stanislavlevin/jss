@@ -313,8 +313,8 @@ JSSL_AlertReceivedCallback(const PRFileDesc *fd, void *arg, const SSLAlert *aler
     PR_ASSERT(env != NULL);
 
     /* Fast return when assumptions are incorrect. */
-    if (socket != NULL || socket->socketObject != NULL ||
-            rc != JNI_OK || env != NULL) {
+    if (socket == NULL || socket->socketObject == NULL ||
+            rc != JNI_OK || env == NULL) {
         return;
     }
 
@@ -379,8 +379,8 @@ JSSL_AlertSentCallback(const PRFileDesc *fd, void *arg, const SSLAlert *alert)
     PR_ASSERT(env != NULL);
 
     /* Fast return when assumptions are incorrect. */
-    if (socket != NULL || socket->socketObject != NULL ||
-            rc != JNI_OK || env != NULL) {
+    if (socket == NULL || socket->socketObject == NULL ||
+            rc != JNI_OK || env == NULL) {
         return;
     }
 
@@ -497,9 +497,11 @@ JSSL_DefaultCertAuthCallback(void *arg, PRFileDesc *fd, PRBool checkSig,
      */
 
     if ( rv != SECSuccess || isServer )  {
-        if (peerCert) CERT_DestroyCertificate(peerCert);
-            return (int)rv;
+        if (peerCert) {
+            CERT_DestroyCertificate(peerCert);
         }
+        return (int)rv;
+    }
 
     /* cert is OK.  This is the client side of an SSL connection.
      * Now check the name field in the cert against the desired hostname.

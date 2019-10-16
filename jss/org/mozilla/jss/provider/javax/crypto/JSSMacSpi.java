@@ -11,19 +11,22 @@ import java.security.Key;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.AlgorithmParameterSpec;
 
+import org.mozilla.jss.crypto.CMACAlgorithm;
 import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.crypto.DigestAlgorithm;
 import org.mozilla.jss.crypto.HMACAlgorithm;
 import org.mozilla.jss.crypto.JSSMessageDigest;
 import org.mozilla.jss.crypto.SecretKeyFacade;
+import org.mozilla.jss.crypto.SymmetricKey;
 import org.mozilla.jss.crypto.TokenRuntimeException;
 import org.mozilla.jss.crypto.TokenSupplierManager;
 
 class JSSMacSpi extends javax.crypto.MacSpi {
 
     private JSSMessageDigest digest=null;
-    private HMACAlgorithm alg;
+    private DigestAlgorithm alg;
 
-    protected JSSMacSpi(HMACAlgorithm alg) {
+    protected JSSMacSpi(DigestAlgorithm alg) {
       try {
         this.alg = alg;
         CryptoToken token =
@@ -45,11 +48,17 @@ class JSSMacSpi extends javax.crypto.MacSpi {
         throws InvalidKeyException, InvalidAlgorithmParameterException
     {
       try {
-        if( ! (key instanceof SecretKeyFacade) ) {
-            throw new InvalidKeyException("Must use a JSS key");
+        SymmetricKey real_key;
+        if (key instanceof SecretKeyFacade) {
+            SecretKeyFacade facade = (SecretKeyFacade)key;
+            real_key = facade.key;
+        } else if (key instanceof SymmetricKey) {
+            real_key = (SymmetricKey)key;
+        } else {
+            throw new InvalidKeyException("Must use a key created by JSS! Try exporting the key data and importing it via SecretKeyFactory.");
         }
-        SecretKeyFacade facade = (SecretKeyFacade)key;
-        digest.initHMAC(facade.key);
+
+        digest.initHMAC(real_key);
       } catch(DigestException de) {
         throw new InvalidKeyException(
             "DigestException: " + de.getMessage());
@@ -116,4 +125,9 @@ class JSSMacSpi extends javax.crypto.MacSpi {
         }
     }
 
+    public static class CmacAES extends JSSMacSpi {
+        public CmacAES() {
+            super(CMACAlgorithm.AES);
+        }
+    }
 }

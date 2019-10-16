@@ -5,7 +5,6 @@ import java.util.*;
 import org.mozilla.jss.*;
 import org.mozilla.jss.crypto.*;
 import org.mozilla.jss.pkcs11.*;
-import org.mozilla.jss.pkix.*;
 import org.mozilla.jss.nss.*;
 import org.mozilla.jss.ssl.*;
 import org.mozilla.jss.util.*;
@@ -25,8 +24,7 @@ public class TestBufferPRFD {
         assert(left != null);
         assert(right != null);
 
-        System.err.println(PR.Write(left, info));
-        assert(PR.Send(left, info, 0, 0) == 4);
+        assert(PR.Write(left, info) == 4);
         assert(PR.Send(left, info, 0, 0) == 4);
         assert(PR.Send(left, info, 0, 0) == 2);
 
@@ -44,35 +42,35 @@ public class TestBufferPRFD {
         Buffer.Free(right_read);
     }
 
-    public static PRFDProxy Setup_NSS_Client(PRFDProxy fd, String host) throws Exception {
-        fd = SSL.ImportFD(null, fd);
-        assert(fd != null);
+    public static SSLFDProxy Setup_NSS_Client(PRFDProxy fd, String host) throws Exception {
+        SSLFDProxy result = SSL.ImportFD(null, fd);
+        assert(result != null);
 
-        assert(SSL.ResetHandshake(fd, false) == 0);
-        assert(SSL.SetURL(fd, host) == 0);
+        assert(SSL.ResetHandshake(result, false) == SSL.SECSuccess);
+        assert(SSL.SetURL(result, host) == SSL.SECSuccess);
 
-        TestSSLVersionGetSet(fd);
+        TestSSLVersionGetSet(result);
 
-        return fd;
+        return result;
     }
 
-    public static PRFDProxy Setup_NSS_Server(PRFDProxy fd, String host,
+    public static SSLFDProxy Setup_NSS_Server(PRFDProxy fd, String host,
         PK11Cert cert, PK11PrivKey key) throws Exception
     {
-        fd = SSL.ImportFD(null, fd);
-        assert(fd != null);
+        SSLFDProxy result = SSL.ImportFD(null, fd);
+        assert(result != null);
 
-        assert(SSL.ConfigServerCert(fd, cert, key) == 0);
-        assert(SSL.ConfigServerSessionIDCache(1, 100, 100, null) == 0);
-        assert(SSL.ResetHandshake(fd, true) == 0);
-        assert(SSL.SetURL(fd, host) == 0);
+        assert(SSL.ConfigServerCert(result, cert, key) == SSL.SECSuccess);
+        assert(SSL.ConfigServerSessionIDCache(1, 100, 100, null) == SSL.SECSuccess);
+        assert(SSL.ResetHandshake(result, true) == SSL.SECSuccess);
+        assert(SSL.SetURL(result, host) == SSL.SECSuccess);
 
-        TestSSLVersionGetSet(fd);
+        TestSSLVersionGetSet(result);
 
-        return fd;
+        return result;
     }
 
-    public static boolean IsHandshakeFinished(PRFDProxy c_nspr, PRFDProxy s_nspr) {
+    public static boolean IsHandshakeFinished(SSLFDProxy c_nspr, SSLFDProxy s_nspr) {
         SecurityStatusResult c_result = SSL.SecurityStatus(c_nspr);
         SecurityStatusResult s_result = SSL.SecurityStatus(s_nspr);
 
@@ -81,13 +79,13 @@ public class TestBufferPRFD {
         return c_result.on == 1 && s_result.on == 1;
     }
 
-    public static void TestSSLVersionGetSet(PRFDProxy s_nspr) throws Exception {
+    public static void TestSSLVersionGetSet(SSLFDProxy s_nspr) throws Exception {
         SSLVersionRange initial = SSL.VersionRangeGet(s_nspr);
         System.out.println("Initial: (" + initial.getMinVersion() + ":" + initial.getMinEnum() + ", " + initial.getMaxVersion() + ":" + initial.getMaxEnum() + ")");
 
         SSLVersionRange vrange = new SSLVersionRange(SSLVersion.TLS_1_1, SSLVersion.TLS_1_3);
 
-        assert(SSL.VersionRangeSet(s_nspr, vrange) == 0);
+        assert(SSL.VersionRangeSet(s_nspr, vrange) == SSL.SECSuccess);
 
         SSLVersionRange actual = SSL.VersionRangeGet(s_nspr);
         System.out.println("Actual: (" + actual.getMinVersion() + ":" + actual.getMinEnum() + ", " + actual.getMaxVersion() + ":" + actual.getMaxEnum() + ")");
@@ -102,21 +100,28 @@ public class TestBufferPRFD {
         manager.setPasswordCallback(new Password(password.toCharArray()));
     }
 
-    public static void TestSSLHandshake(String nickname) throws Exception
+    public static void TestSSLHandshake(String server_nickname, String client_nickname) throws Exception
     {
         /* Constants */
         String host = "localhost";
         byte[] peer_info = host.getBytes();
 
-        /* Find SSL Certificate */
+        /* Find SSL Server Certificate */
         CryptoManager manager = CryptoManager.getInstance();
-        PK11Cert server_cert = (PK11Cert) manager.findCertByNickname(nickname);
+        PK11Cert server_cert = (PK11Cert) manager.findCertByNickname(server_nickname);
         PK11PrivKey server_key = (PK11PrivKey) manager.findPrivKeyByCert(server_cert);
 
         assert(server_cert != null);
         assert(server_cert instanceof PK11Cert);
         assert(server_key != null);
         assert(server_key instanceof PK11PrivKey);
+
+        /* Find SSL Client Certificate, if nickname given. */
+        PK11Cert client_cert = null;
+        if (client_nickname != null) {
+            client_cert = (PK11Cert) manager.findCertByNickname(client_nickname);
+            assert(client_cert != null);
+        }
 
         /* Create Buffers and BufferPRFDs */
         BufferProxy read_buf = Buffer.Create(1024);
@@ -125,14 +130,23 @@ public class TestBufferPRFD {
         assert(read_buf != null);
         assert(write_buf != null);
 
-        PRFDProxy c_nspr = PR.NewBufferPRFD(read_buf, write_buf, peer_info);
-        PRFDProxy s_nspr = PR.NewBufferPRFD(write_buf, read_buf, peer_info);
+        PRFDProxy c_buffer = PR.NewBufferPRFD(read_buf, write_buf, peer_info);
+        PRFDProxy s_buffer = PR.NewBufferPRFD(write_buf, read_buf, peer_info);
 
-        assert(c_nspr != null);
-        assert(s_nspr != null);
+        assert(c_buffer != null);
+        assert(s_buffer != null);
 
-        c_nspr = Setup_NSS_Client(c_nspr, host);
-        s_nspr = Setup_NSS_Server(s_nspr, host, server_cert, server_key);
+        SSLFDProxy c_nspr = Setup_NSS_Client(c_buffer, host);
+        SSLFDProxy s_nspr = Setup_NSS_Server(s_buffer, host, server_cert, server_key);
+
+        /* Apply Client Certificate, if given. When given, request it as the
+         * server. */
+        if (client_cert != null) {
+            c_nspr.SetClientCert(client_cert);
+            assert(SSL.AttachClientCertCallback(c_nspr) == SSL.SECSuccess);
+
+            assert(SSL.OptionSet(s_nspr, SSL.REQUEST_CERTIFICATE, 1) == SSL.SECSuccess);
+        }
 
         assert(c_nspr != null);
         assert(s_nspr != null);
@@ -171,8 +185,14 @@ public class TestBufferPRFD {
         /* Test peer data */
         assert(SSL.PeerCertificate(c_nspr) != null);
         assert(SSL.PeerCertificateChain(c_nspr) != null);
-        assert(SSL.PeerCertificate(s_nspr) == null);
-        assert(SSL.PeerCertificateChain(s_nspr) == null);
+
+        if (client_nickname == null) {
+            assert(SSL.PeerCertificate(s_nspr) == null);
+            assert(SSL.PeerCertificateChain(s_nspr) == null);
+        } else {
+            assert(SSL.PeerCertificate(s_nspr) != null);
+            assert(SSL.PeerCertificateChain(s_nspr) != null);
+        }
 
         /* Send data from client -> server */
         byte[] client_message = "Cooking MCs".getBytes();
@@ -233,10 +253,16 @@ public class TestBufferPRFD {
         System.out.println("Initializing CryptoManager...");
         InitializeCM(args[0], args[1]);
 
-        System.out.println("Calling TestSSLHandshake(Server_RSA)...");
-        TestSSLHandshake("Server_RSA");
+        System.out.println("Calling TestSSLHandshake(Server_RSA, null)...");
+        TestSSLHandshake("Server_RSA", null);
 
-        System.out.println("Calling TestSSLHandshake(Server_ECDSA)...");
-        TestSSLHandshake("Server_ECDSA");
+        System.out.println("Calling TestSSLHandshake(Server_RSA, Client_RSA)...");
+        TestSSLHandshake("Server_RSA", "Client_RSA");
+
+        System.out.println("Calling TestSSLHandshake(Server_ECDSA, null)...");
+        TestSSLHandshake("Server_ECDSA", null);
+
+        System.out.println("Calling TestSSLHandshake(Server_ECDSA, Client_ECDSA)...");
+        TestSSLHandshake("Server_ECDSA", "Client_ECDSA");
     }
 }

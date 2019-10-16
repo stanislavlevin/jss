@@ -7,7 +7,7 @@
 #include <string.h>
 
 /* Ring buffer implementation to handle read/write calls. */
-#include "buffer.h"
+#include "j_buffer.h"
 #include "BufferPRFD.h"
 
 /* This struct stores all the private data we need access to from inside our
@@ -153,7 +153,7 @@ static PRInt32 PRBufferSend(PRFileDesc *fd, const void *buf, PRInt32 amount,
 
     if (!jb_can_write(internal->write_buffer)) {
         /* Under correct Unix non-blocking socket semantics, if we lack data
-         * to read, return a negative length and set EWOULDBLOCK. This is
+         * to write, return a negative length and set EWOULDBLOCK. This is
          * documented in `man 2 recv`. */
         PR_SetError(PR_WOULD_BLOCK_ERROR, EWOULDBLOCK);
         return -1;
@@ -162,8 +162,18 @@ static PRInt32 PRBufferSend(PRFileDesc *fd, const void *buf, PRInt32 amount,
     /* By checking if we can write, we ensure we don't return 0 from
      * jb_write(...); otherwise, we'd violate non-blocking socket
      * semantics. */
-    return jb_write(internal->write_buffer, (uint8_t*) buf, amount);
+    return jb_write(internal->write_buffer, (const uint8_t *) buf, amount);
 }
+
+// Respond to write requests
+static PRInt32 PRBufferWrite(PRFileDesc *fd, const void *buf, PRInt32 amount)
+{
+    /* Write is the same as Send except that it doesn't have a timeout or
+     * understand flags. Since our implementation of Send is fake, pass
+     * arbitrary data and use it to implement Write as well. */
+    return PRBufferSend(fd, buf, amount, 0, -1);
+}
+
 
 // Respond to recv requests
 static PRInt32 PRBufferRecv(PRFileDesc *fd, void *buf, PRInt32 amount, PRIntn flags, PRIntervalTime timeout)
@@ -183,40 +193,70 @@ static PRInt32 PRBufferRecv(PRFileDesc *fd, void *buf, PRInt32 amount, PRIntn fl
     /* By checking if we can read, we ensure we don't return 0 from
      * jb_read(...); otherwise, we'd violate non-blocking socket
      * semantics. */
-    return jb_read(internal->read_buffer, (uint8_t*) buf, amount);
+    return jb_read(internal->read_buffer, (uint8_t *) buf, amount);
+}
+
+// Respond to read requests
+static PRInt32 PRBufferRead(PRFileDesc *fd, void *buf, PRInt32 amount)
+{
+    /* Read is the same as Recv except that it doesn't have a timeout or
+     * understand flags. Since our implementation of Recv is fake, pass
+     * arbitrary data and use it to implement Read as well. */
+    return PRBufferRecv(fd, buf, amount, 0, -1);
 }
 
 // Fake responses to getSocketOption requests
 static PRStatus PRBufferGetSocketOption(PRFileDesc *fd, PRSocketOptionData *data)
 {
-    /* getSocketOption takes a PRFileDesc and modifies the PRSocketOptionData
-     * with the options on this. We set a couple of sane defaults here:
+    /* getSocketOption takes a PRFileDesc and modifies the value field of data
+     * with socket option specified in the option field. We fake responses with
+     * a couple of sane defaults here:
      *
      *   non_blocking = true
      *   reuse_addr = true
      *   keep_alive = false
      *   no_delay = true
      *
-     * However the list above is far fom extensive. Note that responses are
-     * "fake" in that calls to setSocketOption fail to reflect here.
+     * We return valid responses to three other options:
+     *
+     *   max_segment = capacity of read_buffer
+     *   recv_buffer_size = capacity of read buffer
+     *   send_buffer_size = capacity of write buffer
+     *
+     * Note that all responses are "fake" in that calls to SetSocketOption will
+     * not be reflected here.
      */
 
-    if (data) {
-        PRFilePrivate *internal = fd->secret;
-
-        data->value.non_blocking = PR_TRUE;
-        data->value.reuse_addr = PR_TRUE;
-        data->value.keep_alive = PR_FALSE;
-        data->value.mcast_loopback = PR_FALSE;
-        data->value.no_delay = PR_TRUE;
-        data->value.max_segment = jb_capacity(internal->read_buffer);
-        data->value.recv_buffer_size = jb_capacity(internal->read_buffer);
-        data->value.send_buffer_size = jb_capacity(internal->write_buffer);
-
-        return PR_SUCCESS;
+    if (!data || !fd) {
+        return PR_FAILURE;
     }
 
-    return PR_FAILURE;
+    PRFilePrivate *internal = fd->secret;
+    switch (data->option) {
+    case PR_SockOpt_Nonblocking:
+        data->value.non_blocking = PR_TRUE;
+        return PR_SUCCESS;
+    case PR_SockOpt_Reuseaddr:
+        data->value.reuse_addr = PR_TRUE;
+        return PR_SUCCESS;
+    case PR_SockOpt_Keepalive:
+        data->value.keep_alive = PR_FALSE;
+        return PR_SUCCESS;
+    case PR_SockOpt_NoDelay:
+        data->value.no_delay = PR_TRUE;
+        return PR_SUCCESS;
+    case PR_SockOpt_MaxSegment:
+        data->value.max_segment = jb_capacity(internal->read_buffer);
+        return PR_SUCCESS;
+    case PR_SockOpt_RecvBufferSize:
+        data->value.recv_buffer_size = jb_capacity(internal->read_buffer);
+        return PR_SUCCESS;
+    case PR_SockOpt_SendBufferSize:
+        data->value.send_buffer_size = jb_capacity(internal->write_buffer);
+        return PR_SUCCESS;
+    default:
+        return PR_FAILURE;
+    }
 }
 
 // Fake responses to setSocketOption
@@ -233,8 +273,8 @@ static PRStatus PRBufferSetSocketOption(PRFileDesc *fd, const PRSocketOptionData
 static const PRIOMethods PRIOBufferMethods = {
     PR_DESC_SOCKET_TCP,
     PRBufferClose,
-    (PRReadFN)invalidInternalCall,
-    (PRWriteFN)invalidInternalCall,
+    PRBufferRead,
+    PRBufferWrite,
     (PRAvailableFN)invalidInternalCall,
     (PRAvailable64FN)invalidInternalCall,
     (PRFsyncFN)invalidInternalCall,

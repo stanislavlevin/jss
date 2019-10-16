@@ -387,6 +387,14 @@ PR_BEGIN_EXTERN_C
 #define PRFD_PROXY_CONSTRUCTOR_SIG "([B)V"
 
 /*
+ * SSLFDProxy
+ */
+#define SSLFD_PROXY_CLASS_NAME "org/mozilla/jss/nss/SSLFDProxy"
+#define SSLFD_PROXY_CONSTRUCTOR_SIG "([B)V"
+#define SSLFD_PROXY_CLIENT_CERT_FIELD "clientCert"
+#define SSLFD_PROXY_CLIENT_CERT_SIG "Lorg/mozilla/jss/pkcs11/PK11Cert;"
+
+/*
  * SecurityStatusResult
  */
 #define SECURITY_STATUS_CLASS_NAME "org/mozilla/jss/nss/SecurityStatusResult"

@@ -5,6 +5,7 @@
 package org.mozilla.jss.pkcs11;
 
 import java.math.BigInteger;
+import java.security.AlgorithmParameters;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidParameterException;
 import java.security.KeyPair;
@@ -12,6 +13,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.DSAParameterSpec;
+import java.security.spec.ECGenParameterSpec;
 import java.util.Hashtable;
 
 import org.mozilla.jss.asn1.ASN1Util;
@@ -21,6 +23,7 @@ import org.mozilla.jss.crypto.PQGParams;
 import org.mozilla.jss.crypto.RSAParameterSpec;
 import org.mozilla.jss.crypto.TokenException;
 import org.mozilla.jss.util.Assert;
+import org.mozilla.jss.util.ECCurve;
 
 /**
  * A Key Pair Generator implemented using PKCS #11.
@@ -323,7 +326,7 @@ public final class PK11KeyPairGenerator
     public PK11KeyPairGenerator(PK11Token token, KeyPairAlgorithm algorithm)
         throws NoSuchAlgorithmException, TokenException
     {
-        Assert._assert(token!=null && algorithm!=null);
+        assert(token!=null && algorithm!=null);
 
         mKeygenOnInternalToken = false;
 
@@ -382,7 +385,7 @@ public final class PK11KeyPairGenerator
                     "be 512, 768, or 1024.");
             }
         } else {
-            Assert._assert( algorithm == KeyPairAlgorithm.EC );
+            assert( algorithm == KeyPairAlgorithm.EC );
             if (strength < 112) {
                 // for EC, "strength" is actually a code for curves defined in
                 //   ECCurve_Code
@@ -429,16 +432,26 @@ public final class PK11KeyPairGenerator
                 throw new InvalidAlgorithmParameterException();
             }
         } else {
-            Assert._assert( algorithm == KeyPairAlgorithm.EC);
-            // requires JAVA 1.5
-            // if(! (params instanceof ECParameterSpec) ) {
-            //   throw new InvalidAlgorithmParameterException();
-            //}
-            // requires JAVA 1.5
-            if(! (params instanceof PK11ParameterSpec) ) {
-               throw new InvalidAlgorithmParameterException();
+            assert(algorithm == KeyPairAlgorithm.EC);
+            if (params instanceof ECGenParameterSpec) {
+                ECGenParameterSpec standard_params = (ECGenParameterSpec)params;
+                String curve_name = standard_params.getName();
+                ECCurve curve = ECCurve.fromName(curve_name);
+                if (curve == null) {
+                    throw new InvalidAlgorithmParameterException("Unable to find curve with the given name: " + curve_name);
+                }
+
+                OBJECT_IDENTIFIER[] oid = curve.getOIDs();
+                assert(oid.length >= 1);
+
+                byte[] encoded_oid = ASN1Util.encode(oid[0]);
+                params = new PK11ParameterSpec(encoded_oid);
             }
-	} // future add support for X509EncodedSpec
+
+            if (!(params instanceof PK11ParameterSpec)) {
+                throw new InvalidAlgorithmParameterException("Expected params to either be an instance of ECGenParameterSpec or PK11ParameterSpec!");
+            }
+        } // future add support for X509EncodedSpec
 
         this.params = params;
     }
@@ -489,7 +502,7 @@ public final class PK11KeyPairGenerator
                 extractablePairMode,
                 opFlags, opFlagsMask);
         } else {
-            Assert._assert( algorithm == KeyPairAlgorithm.EC );
+            assert( algorithm == KeyPairAlgorithm.EC );
             // requires JAVA 1.5 for ECParameters.
             //
             //AlgorithmParameters ecParams =
@@ -680,9 +693,9 @@ public final class PK11KeyPairGenerator
     private static synchronized void
     testDefaults() {
         if(!defaultsTested) {
-            Assert._assert(PQG1024.paramsAreValid());
-            Assert._assert(PQG768.paramsAreValid());
-            Assert._assert(PQG512.paramsAreValid());
+            assert(PQG1024.paramsAreValid());
+            assert(PQG768.paramsAreValid());
+            assert(PQG512.paramsAreValid());
             defaultsTested = true;
         }
     }

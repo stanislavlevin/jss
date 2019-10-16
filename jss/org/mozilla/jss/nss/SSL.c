@@ -12,6 +12,7 @@
 #include "jssutil.h"
 #include "pk11util.h"
 #include "PRFDProxy.h"
+#include "SSLFDProxy.h"
 #include "SSLVersionRange.h"
 
 #include "_jni/org_mozilla_jss_nss_SSL.h"
@@ -82,7 +83,7 @@ Java_org_mozilla_jss_nss_SSL_ImportFD(JNIEnv *env, jclass clazz, jobject model,
 
     result = SSL_ImportFD(real_model, real_fd);
 
-    return JSS_PR_wrapPRFDProxy(env, &result);
+    return JSS_PR_wrapSSLFDProxy(env, &result);
 }
 
 JNIEXPORT int JNICALL
@@ -408,6 +409,34 @@ Java_org_mozilla_jss_nss_SSL_PeerCertificateChain(JNIEnv *env, jclass clazz,
     }
 
     return JSS_PK11_wrapCertChain(env, &chain);
+}
+
+JNIEXPORT jint JNICALL
+Java_org_mozilla_jss_nss_SSL_AttachClientCertCallback(JNIEnv *env, jclass clazz,
+    jobject fd)
+{
+    PRFileDesc *real_fd = NULL;
+    CERTCertificate *real_cert = NULL;
+
+    PR_ASSERT(env != NULL && fd != NULL);
+
+    if (JSS_PR_getPRFileDesc(env, fd, &real_fd) != PR_SUCCESS) {
+        return SECFailure;
+    }
+
+    if (JSS_NSS_getSSLClientCert(env, fd, &real_cert) != PR_SUCCESS) {
+        return SECFailure;
+    }
+
+    /* When the returned cert is empty and no error occurred, there was no
+     * client certificate specified via SSLFD.SetClientCert(...). Don't add
+     * the certificate selection callback handler. */
+    if (real_cert == NULL) {
+        return SECSuccess;
+    }
+
+    return SSL_GetClientAuthDataHook(real_fd, JSSL_SSLFDCertSelectionCallback,
+                                     (void *)real_cert);
 }
 
 JNIEXPORT jint JNICALL

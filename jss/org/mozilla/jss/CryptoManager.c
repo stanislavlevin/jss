@@ -904,9 +904,9 @@ Java_org_mozilla_jss_CryptoManager_enableFIPS
     }
 
     if(status != SECSuccess) {
-        JSS_throwMsg(env,
-                     GENERAL_SECURITY_EXCEPTION,
-                     "Failed to toggle FIPS mode");
+        JSS_throwMsgPortErr(env,
+                            GENERAL_SECURITY_EXCEPTION,
+                            "Failed to toggle FIPS mode");
     }
 
     return switched;
@@ -1023,5 +1023,15 @@ Java_org_mozilla_jss_CryptoManager_getJSSPatchVersion(
         JNIEnv *env, jobject this)
 {
     return JSS_VPATCH;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_mozilla_jss_CryptoManager_getJSSDebug(JNIEnv *env, jobject this)
+{
+#ifdef DEBUG
+    return JNI_TRUE;
+#else
+    return JNI_FALSE;
+#endif
 }
 

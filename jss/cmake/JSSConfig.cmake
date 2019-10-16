@@ -2,7 +2,7 @@ macro(jss_config)
     # Set the current JSS release number. Arguments are:
     #   MAJOR MINOR PATCH BETA
     # When BETA is zero, it isn't a beta release.
-    jss_config_version(4 6 1 0)
+    jss_config_version(4 6 2 0)
 
     # Configure output directories
     jss_config_outputs()
@@ -13,6 +13,12 @@ macro(jss_config)
 
     # Configure java-related flags
     jss_config_java()
+
+    # Template auto-generated files
+    jss_config_template()
+
+    # Check symbols to see what tests we run
+    jss_config_symbols()
 endmacro()
 
 macro(jss_config_version MAJOR MINOR PATCH BETA)
@@ -45,21 +51,11 @@ macro(jss_config_version MAJOR MINOR PATCH BETA)
         set(JSS_VERSION "${JSS_VERSION} beta ${JSS_VERSION_BETA}")
         set(JSS_VERSION_STR "${JSS_VERSION_STR}_b${JSS_VERSION_BETA}")
     endif()
-
-    # Template files
-    configure_file(
-        "${PROJECT_SOURCE_DIR}/org/mozilla/jss/util/jssver.h.in"
-        "${PROJECT_SOURCE_DIR}/org/mozilla/jss/util/jssver.h"
-    )
-    configure_file(
-        "${PROJECT_SOURCE_DIR}/lib/MANIFEST.MF.in"
-        "${CMAKE_BINARY_DIR}/MANIFEST.MF"
-    )
 endmacro()
 
 macro(jss_config_outputs)
-    # Global variables representing various output files; note that these are
-    # created at the end of this macro.
+    # Global variables representing various output files; note that these
+    # directories are created at the end of this macro.
     set(CLASSES_OUTPUT_DIR "${CMAKE_BINARY_DIR}/classes/jss")
     set(DOCS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/docs")
     set(LIB_OUTPUT_DIR "${CMAKE_BINARY_DIR}/lib")
@@ -104,9 +100,7 @@ macro(jss_config_outputs)
     file(MAKE_DIRECTORY "${BIN_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${INCLUDE_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${JNI_OUTPUT_DIR}")
-
     file(MAKE_DIRECTORY "${TARGETS_OUTPUT_DIR}")
-
     file(MAKE_DIRECTORY "${TESTS_CLASSES_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${TESTS_INCLUDE_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${TESTS_JNI_OUTPUT_DIR}")
@@ -134,11 +128,21 @@ macro(jss_config_cflags)
     list(APPEND JSS_RAW_C_FLAGS "-Wno-unknown-warning-option")
     list(APPEND JSS_RAW_C_FLAGS "-Werror-implicit-function-declaration")
     list(APPEND JSS_RAW_C_FLAGS "-Wno-switch")
-    list(APPEND JSS_RAW_C_FLAGS "-I${NSPR_INCLUDE_DIR}")
-    list(APPEND JSS_RAW_C_FLAGS "-I${NSS_INCLUDE_DIR}")
     list(APPEND JSS_RAW_C_FLAGS "-I${INCLUDE_OUTPUT_DIR}")
     foreach(JNI_INCLUDE_DIR ${JNI_INCLUDE_DIRS})
         list(APPEND JSS_RAW_C_FLAGS "-I${JNI_INCLUDE_DIR}")
+    endforeach()
+    foreach(NSPR_INCLUDE_DIR ${NSPR_INCLUDE_DIRS})
+        list(APPEND JSS_RAW_C_FLAGS "-I${NSPR_INCLUDE_DIR}")
+    endforeach()
+    foreach(NSS_INCLUDE_DIR ${NSS_INCLUDE_DIRS})
+        list(APPEND JSS_RAW_C_FLAGS "-I${NSS_INCLUDE_DIR}")
+    endforeach()
+    foreach(NSPR_LIBRARY ${NSPR_LIBRARIES})
+        list(APPEND JSS_RAW_C_FLAGS "-L${NSPR_LIBRARY}")
+    endforeach()
+    foreach(NSS_LIBRARY ${NSS_LIBRARIES})
+        list(APPEND JSS_RAW_C_FLAGS "-L${NSS_LIBRARY}")
     endforeach()
 
     foreach(JSS_RAW_C_FLAG ${JSS_RAW_C_FLAGS})
@@ -306,6 +310,9 @@ macro(jss_config_java)
         list(APPEND JSS_TEST_JAVAC_FLAGS "-O")
     endif()
 
+    message(STATUS "JSS JAVAC FLAGS: ${JSS_JAVAC_FLAGS}")
+    message(STATUS "JSS TEST JAVAC FLAGS: ${JSS_TEST_JAVAC_FLAGS}")
+
     # Variables for javadoc building. Note that JSS_PACKAGES needs to be
     # updated whenever a new package is created.
     set(JSS_WINDOW_TITLE "JSS: Java Security Services")
@@ -314,4 +321,31 @@ macro(jss_config_java)
     set(JSS_BASE_PORT 2876)
     math(EXPR JSS_TEST_PORT_CLIENTAUTH ${JSS_BASE_PORT}+0)
     math(EXPR JSS_TEST_PORT_CLIENTAUTH_FIPS ${JSS_BASE_PORT}+1)
+endmacro()
+
+macro(jss_config_template)
+    # Template files
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/org/mozilla/jss/util/jssver.h.in"
+        "${PROJECT_SOURCE_DIR}/org/mozilla/jss/util/jssver.h"
+    )
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/lib/MANIFEST.MF.in"
+        "${CMAKE_BINARY_DIR}/MANIFEST.MF"
+    )
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/tools/run_test.sh.in"
+        "${CMAKE_BINARY_DIR}/run_test.sh"
+    )
+endmacro()
+
+macro(jss_config_symbols)
+    list(APPEND CMAKE_REQUIRED_INCLUDES ${NSPR_INCLUDE_DIRS})
+    list(APPEND CMAKE_REQUIRED_INCLUDES ${NSS_INCLUDE_DIRS})
+    jss_list_join(JSS_C_FLAGS " " CMAKE_REQUIRED_FLAGS)
+
+    check_symbol_exists("CKM_AES_CMAC" "nspr.h;nss.h;pkcs11t.h" HAVE_NSS_CMAC)
+    if(NOT HAVE_NSS_CMAC)
+        message(WARNING "Your NSS version doesn't support CMAC; some features of JSS won't work.")
+    endif()
 endmacro()

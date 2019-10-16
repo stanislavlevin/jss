@@ -5,7 +5,7 @@
 
 #include "jssutil.h"
 #include "BufferProxy.h"
-#include "buffer.h"
+#include "j_buffer.h"
 
 #include "_jni/org_mozilla_jss_nss_Buffer.h"
 
@@ -180,4 +180,5 @@ Java_org_mozilla_jss_nss_Buffer_Free(JNIEnv *env, jclass clazz, jobject buf)
     }
 
     jb_free(real_buf);
+    JSS_clearPtrFromProxy(env, buf);
 }

@@ -287,16 +287,16 @@ public final class CryptoManager implements TokenSupplier
         while(tokens.hasMoreElements()) {
             PK11Token token = (PK11Token) tokens.nextElement();
             if( token.isInternalCryptoToken() ) {
-                Assert._assert(internalCryptoToken == null);
+                assert(internalCryptoToken == null);
                 internalCryptoToken = token;
             }
             if( token.isInternalKeyStorageToken() ) {
-                Assert._assert(internalKeyStorageToken == null);
+                assert(internalKeyStorageToken == null);
                 internalKeyStorageToken = token;
             }
         }
-        Assert._assert(internalKeyStorageToken != null);
-        Assert._assert(internalCryptoToken != null);
+        assert(internalKeyStorageToken != null);
+        assert(internalCryptoToken != null);
     }
 
     /**
@@ -522,8 +522,12 @@ public final class CryptoManager implements TokenSupplier
         logger.debug("Loaded " + kt);
 
         if( values.installJSSProvider ) {
-            int position = java.security.Security.insertProviderAt(
-                            new JSSProvider(), 1);
+            int insert_position = 1;
+            if (!values.installJSSProviderFirst) {
+                insert_position = java.security.Security.getProviders().length + 1;
+            }
+
+            int position = java.security.Security.insertProviderAt(new JSSProvider(), insert_position);
             if (position < 0) {
                 logger.warn("JSS provider is already installed");
             }
@@ -737,6 +741,17 @@ public final class CryptoManager implements TokenSupplier
         }
     }
 
+    /**
+     * Imports a single DER-encoded certificate into the permanent or temporary
+     * certificate database.
+     */
+    public X509Certificate importDERCert(byte[] cert, CertificateUsage usage,
+                                         boolean permanent, String nickname) {
+        return importDERCertNative(cert, usage.getEnumValue(), permanent, nickname);
+    }
+
+    private native X509Certificate importDERCertNative(byte[] cert, int usage, boolean permanent, String nickname);
+
     private native InternalCertificate
         importCertToPermNative(X509Certificate cert, String nickname)
         throws TokenException;
@@ -826,7 +841,7 @@ public final class CryptoManager implements TokenSupplier
     findCertByNickname(String nickname)
         throws ObjectNotFoundException, TokenException
     {
-        Assert._assert(nickname!=null);
+        assert(nickname!=null);
         return findCertByNicknameNative(nickname);
     }
 
@@ -842,7 +857,7 @@ public final class CryptoManager implements TokenSupplier
     findCertsByNickname(String nickname)
         throws TokenException
     {
-        Assert._assert(nickname!=null);
+        assert(nickname!=null);
         return findCertsByNicknameNative(nickname);
     }
 
@@ -934,7 +949,7 @@ public final class CryptoManager implements TokenSupplier
     findPrivKeyByCert(org.mozilla.jss.crypto.X509Certificate cert)
         throws ObjectNotFoundException, TokenException
     {
-        Assert._assert(cert!=null);
+        assert(cert!=null);
         if(! (cert instanceof org.mozilla.jss.pkcs11.PK11Cert)) {
             throw new ObjectNotFoundException("Non-pkcs11 cert passed to PK11Finder");
         }
@@ -980,11 +995,14 @@ public final class CryptoManager implements TokenSupplier
     public native static int getJSSMajorVersion();
     public native static int getJSSMinorVersion();
     public native static int getJSSPatchVersion();
+    private native static boolean getJSSDebug();
 
     public static final String
     JAR_JSS_VERSION     = "JSS_VERSION = JSS_" + getJSSMajorVersion() +
                           "_" + getJSSMinorVersion() +
                           "_" + getJSSPatchVersion();
+
+    public static final boolean JSS_DEBUG = getJSSDebug();
 
     // Hashtable is synchronized.
     private Hashtable<Thread, CryptoToken> perThreadTokenTable = new Hashtable<>();
@@ -1125,6 +1143,25 @@ public final class CryptoManager implements TokenSupplier
         verifyCertificateNowNative2(nickname, checkSig, usage);
     }
 
+    /**
+     * Verify an X509Certificate by checking if it's valid and that we trust
+     * the issuer. Verify time against now.
+     * @param cert the certificate to verify
+     * @param checkSig verify the signature of the certificate
+     * @param certificateUsage see certificate usage defined to verify certificate
+     *
+     * @exception InvalidNicknameException If the nickname is null.
+     * @exception ObjectNotFoundException If no certificate could be found
+     *      with the given nickname.
+     * @exception CertificateException If certificate is invalid.
+     */
+    public void verifyCertificate(X509Certificate cert, boolean checkSig,
+            CertificateUsage certificateUsage) throws ObjectNotFoundException,
+            InvalidNicknameException, CertificateException {
+        int usage = certificateUsage == null ? 0 : certificateUsage.getUsage();
+        verifyCertificateNowNative3(cert, checkSig, usage);
+    }
+
     private native boolean verifyCertificateNowNative(String nickname,
         boolean checkSig, int certificateUsage) throws ObjectNotFoundException;
 
@@ -1133,6 +1170,12 @@ public final class CryptoManager implements TokenSupplier
             boolean checkSig,
             int certificateUsage)
        throws ObjectNotFoundException, InvalidNicknameException, CertificateException;
+
+    private native void verifyCertificateNowNative3(
+            X509Certificate cert,
+            boolean checkSig,
+            int certificateUsage)
+        throws ObjectNotFoundException, InvalidNicknameException, CertificateException;
 
     /**
      * note: this method calls obsolete function in NSS
@@ -1223,6 +1266,17 @@ public final class CryptoManager implements TokenSupplier
 
     public static synchronized int getOCSPPolicy() {
         return ocspPolicy.ordinal();
+    }
+
+    /**
+     * Gets the current OCSP Policy.
+     *
+     * @see getOCSPPolicy()
+     *
+     * @return - The current OCSP policy in effect.
+     */
+    public static synchronized OCSPPolicy getOCSPPolicyEnum() {
+        return ocspPolicy;
     }
 
     /**
