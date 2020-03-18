@@ -28,7 +28,6 @@ BuildRequires: jpackage-generic-compat
 BuildRequires: libnss-devel
 BuildRequires: libnspr-devel
 BuildRequires: apache-commons-lang
-BuildRequires: apache-commons-codec
 BuildRequires: slf4j
 BuildRequires: slf4j-jdk14
 
@@ -39,7 +38,6 @@ BuildRequires: nss-utils
 %endif
 
 Requires: apache-commons-lang
-Requires: apache-commons-codec
 Requires: glassfish-jaxb-api
 Requires: java-1.8.0-openjdk-headless
 Requires: slf4j
