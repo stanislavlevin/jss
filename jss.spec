@@ -3,6 +3,8 @@
 
 %def_with check
 
+%define nss_version 3.44
+
 Name: jss
 Version: 4.6.2
 Release: alt2.1
@@ -25,7 +27,7 @@ BuildRequires: /proc
 BuildRequires: cmake
 BuildRequires: java-1.8.0-openjdk-devel
 BuildRequires: jpackage-generic-compat
-BuildRequires: libnss-devel
+BuildRequires: libnss-devel >= %nss_version
 BuildRequires: libnspr-devel
 BuildRequires: apache-commons-lang
 BuildRequires: slf4j
@@ -34,13 +36,14 @@ BuildRequires: slf4j-jdk14
 %if_with check
 BuildRequires: ctest
 BuildRequires: junit
-BuildRequires: nss-utils
+BuildRequires: nss-utils >= %nss_version
 %endif
 
 Requires: apache-commons-lang
 Requires: glassfish-jaxb-api
 Requires: java-1.8.0-openjdk-headless
 Requires: slf4j
+Requires: libnss >= %nss_version
 
 %description
 Network Security Services for Java (JSS) is a Java interface to NSS. JSS
