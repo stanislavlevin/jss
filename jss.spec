@@ -6,8 +6,8 @@
 %define nss_version 3.44
 
 Name: jss
-Version: 4.6.2
-Release: alt2.1
+Version: 4.7.3
+Release: alt1
 
 Summary: Java Security Services (JSS)
 License: MPL-1.1 or GPLv2+ or LGPLv2+
@@ -124,6 +124,9 @@ cp -p *.txt %buildroot%_javadocdir/%name-%version
 %_javadocdir/%name-%version
 
 %changelog
+* Mon Sep 28 2020 Stanislav Levin <slev@altlinux.org> 4.7.3-alt1
+- 4.6.2 -> 4.7.3.
+
 * Sat Sep 19 2020 Andrey Cherepanov <cas@altlinux.org> 4.6.2-alt2.1
 - NMU: Fix build with nss-3.52.
 - NMU: Fix bigus timestamp in changelog.
