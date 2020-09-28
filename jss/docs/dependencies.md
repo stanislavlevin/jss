@@ -8,10 +8,9 @@ This project has the following dependencies:
  - [NSS](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS)
     - A c and c++ compiler such as [gcc](ttps://gcc.gnu.org/)
     - [zlib](https://zlib.net/)
- - [OpenJDK 1.8.0](http://openjdk.java.net/)
+ - [OpenJDK 1.8.0 or newer](http://openjdk.java.net/)
  - [CMake](https://cmake.org/)
  - [Apache Commons Lang](https://commons.apache.org/proper/commons-lang/)
- - [Apache Commons Codec](https://commons.apache.org/proper/commons-codec/)
  - [JavaEE JAXB](https://github.com/eclipse-ee4j/jaxb-ri)
  - [SLF4J](https://www.slf4j.org/)
 
@@ -20,16 +19,16 @@ reproducible builds.
 
 To install these dependencies on Fedora, execute the following:
 
-    sudo dnf install apache-commons-codec apache-commons-lang gcc-c++ \
-                     java-devel jpackage-utils slf4j zlib-devel \
-                     glassfish-jaxb-api cmake
+    sudo dnf install apache-commons-lang gcc-c++ java-devel jpackage-utils \
+                     slf4j zlib-devel glassfish-jaxb-api nss-tools nss-devel \
+                     cmake junit
 
 To install these dependencies on Debian, execute the following:
 
-    sudo apt-get install build-essential libcommons-codec-java \
-                         libcommons-lang-java libnss3-dev libslf4j-java \
-                         openjdk-8-jdk pkg-config zlib1g-dev \
-                         libjaxb-api-java cmake zip unzip
+    sudo apt-get install build-essential libcommons-lang-java libnss3-dev \
+                         libslf4j-java default-jdk pkg-config zlib1g-dev \
+                         libjaxb-api-java libnss3-tools cmake zip unzip \
+                         junit4
 
 ## Test Suite Dependencies:
 
@@ -56,10 +55,13 @@ At run time, the following JARs are required to be specified on the
 
  - `jss4.jar`
  - `slf4j-api.jar`
- - `apache-commons-codec.jar`
  - `apache-commons-lang.jar`
  - `jaxb-api.jar`
 
 Note that these should already be installed when building JSS. For more
 information, please refer to our documentation on using JSS:
 [`docs/using_jss.md`](using_jss.md).
+
+## Incompatibilities
+
+Known NSS incompatibilities are documented in [`docs/nss.md`](nss.md).

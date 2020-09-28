@@ -4,13 +4,18 @@
 
 package org.mozilla.jss.util;
 
-import java.util.HashSet;
-
 import java.lang.AutoCloseable;
 import java.lang.Thread;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.mozilla.jss.CryptoManager;
+import org.mozilla.jss.netscape.security.util.Utils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +36,7 @@ public abstract class NativeProxy implements AutoCloseable
 
     /**
      * Create a NativeProxy from a byte array representing a C pointer.
-     * This is the only way to create a NativeProxy, it should be called
+     * This is the primary way of creating a NativeProxy; it should be called
      * from the constructor of your subclass.
      *
      * @param pointer A byte array, created with JSS_ptrToByteArray, that
@@ -39,11 +44,27 @@ public abstract class NativeProxy implements AutoCloseable
      * NativeProxy instance acts as a proxy for that native data structure.
      */
     public NativeProxy(byte[] pointer) {
-		assert(pointer!=null);
-        mPointer = pointer;
-        registry.add(this);
+        this(pointer, true);
+    }
 
-        if (saveStacktraces) {
+    /**
+     * Create a NativeProxy from a byte array representing a C pointer.
+     * This allows for creating an untracked NativeProxy instance (when
+     * track=false), which allows for creating NativeProxy instances out
+     * of stack-allocated variables and/or creating NativeProxies which
+     * aren't freed.
+     */
+    protected NativeProxy(byte[] pointer, boolean track) {
+        mPointer = pointer;
+        mHashCode = registryIndex.getAndIncrement();
+        if (mPointer != null) {
+            mHashCode += Arrays.hashCode(mPointer);
+        }
+
+        if (track && saveStacktraces) {
+            assert(pointer != null);
+            registry.add(this);
+
             mTrace = Arrays.toString(Thread.currentThread().getStackTrace());
         }
     }
@@ -55,18 +76,31 @@ public abstract class NativeProxy implements AutoCloseable
      *      a different underlying native pointer.
      */
     public boolean equals(Object obj) {
-        if(obj==null) {
+        if (obj == null) {
             return false;
         }
-        if( ! (obj instanceof NativeProxy) ) {
+        if (!(obj instanceof NativeProxy)) {
             return false;
         }
-        if (((NativeProxy)obj).mPointer == null) {
-            /* If mPointer is null, we have no way to compare the values
-             * of the pointers, so assume they're unequal. */
+        NativeProxy nObj = (NativeProxy) obj;
+        if (this.mPointer == null || nObj.mPointer == null) {
             return false;
         }
-        return Arrays.equals(((NativeProxy)obj).mPointer, mPointer);
+
+        return Arrays.equals(this.mPointer, nObj.mPointer);
+    }
+
+    /**
+     * Hash code based around mPointer value.
+     *
+     * Note that Object.hashCode() isn't sufficient as it tries to determine
+     * the Object's value based on all internal variables. Because we want a
+     * single static hashCode that is unique to each instance of nativeProxy,
+     * we construct it up front based on an incrementing counter and cache it
+     * throughout the lifetime of this object.
+     */
+    public int hashCode() {
+        return mHashCode;
     }
 
     /**
@@ -79,7 +113,7 @@ public abstract class NativeProxy implements AutoCloseable
      *
      * If you free these resources explicitly, call clear(); instead.
      */
-    protected abstract void releaseNativeResources();
+    protected abstract void releaseNativeResources() throws Exception;
 
     /**
      * Finalize this NativeProxy by releasing its native resources.
@@ -112,11 +146,11 @@ public abstract class NativeProxy implements AutoCloseable
      */
     public final void close() throws Exception {
         try {
-            if (registry.remove(this)) {
+            if (mPointer != null) {
                 releaseNativeResources();
             }
         } finally {
-            mPointer = null;
+            clear();
         }
     }
 
@@ -131,13 +165,21 @@ public abstract class NativeProxy implements AutoCloseable
      */
     public final void clear() {
         this.mPointer = null;
-        registry.remove(this);
+        // registry.remove(this);
+    }
+
+    /**
+     * Whether or not this is a null pointer.
+     */
+    public boolean isNull() {
+        return this.mPointer == null;
     }
 
     /**
      * Byte array containing native pointer bytes.
      */
     private byte mPointer[];
+    private int mHashCode;
 
     /**
      * String containing backtrace of pointer generation.
@@ -157,7 +199,16 @@ public abstract class NativeProxy implements AutoCloseable
      * NativeProxy.finalize() from their subclasses of NativeProxy, so that
      * releaseNativeResources() gets called.
      */
-    static HashSet<NativeProxy> registry = new HashSet<NativeProxy>();
+    static Set<NativeProxy> registry = Collections.newSetFromMap(new WeakHashMap<NativeProxy, Boolean>());
+    static AtomicInteger registryIndex = new AtomicInteger();
+
+    public String toString() {
+        if (mPointer == null) {
+            return this.getClass().getName() + "[" + mHashCode + "@null]";
+        }
+
+        return this.getClass().getName() + "[" + mHashCode + "@" + Utils.HexEncode(mPointer) + "]";
+    }
 
     /**
      * Internal helper to check whether or not assertions are enabled in the
@@ -188,6 +239,34 @@ public abstract class NativeProxy implements AutoCloseable
             }
         } else {
             logger.debug("NativeProxy registry is empty");
+        }
+    }
+
+    /**
+     * Unsafe: Purges all NativeProxies from memory.
+     *
+     * In the rare instances where we wish to shutdown an existing
+     * CryptoManager, all native proxies need to be cleared and freed.
+     * This will result in any lingering references to stop working, but
+     * should ensure that an application can recover from this scenario.
+     */
+    public synchronized static void purgeAllInRegistry() throws Exception {
+        Exception first = null;
+        HashSet<NativeProxy> registryClone = new HashSet<NativeProxy>(registry.size());
+        registryClone.addAll(registry);
+
+        for (NativeProxy proxy : registryClone) {
+            try {
+                proxy.close();
+            } catch (Exception e) {
+                if (first == null) {
+                    first = e;
+                }
+            }
+        }
+
+        if (first != null) {
+            throw first;
         }
     }
 }

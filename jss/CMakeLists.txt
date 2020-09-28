@@ -28,10 +28,20 @@ if (DEFINED ENV{SANDBOX})
 endif()
 option(SANDBOX "When enabled, expect to find nss and nspr from the parent (sandbox) directory instead of using the system-installed versions of the libraries." ${SANDBOX_ENV})
 
+if (DEFINED ENV{TEST_VALGRIND})
+    set(TEST_VALGRIND_ENV TRUE)
+endif()
+option(TEST_VALGRIND "When enabled, run the entire test suite under Valgrind. This will be noisy as JSS can't clean up NSS initialization and the JVM itself leaks." ${TEST_VALGRIND_ENV})
+
 # Build a debug build by default when no type is specified on the command line
 if(NOT (DEFINED CMAKE_BUILD_TYPE))
     set(CMAKE_BUILD_TYPE "Debug")
 endif()
+
+if (DEFINED ENV{WITH_INTERNET})
+    set(TEST_WITH_INTERNET_ENV TRUE)
+endif()
+option(TEST_WITH_INTERNET "When enabled, runs various tests which require an internet connection. " ${TEST_WITH_INTERNET_ENV})
 
 # Find NSPR and NSS Libraries.
 find_package(NSPR REQUIRED)
@@ -48,8 +58,10 @@ include(Shims)
 # Since we found Java, include UseJava to provide the find_jar function.
 include(UseJava)
 
-# This include is required for the macro check_symbol_exists in jss_config()
+# These includes are required for the macro check_symbol_exists and
+# check_struct_has_member in jss_config().
 include(CheckSymbolExists)
+include(CheckStructHasMember)
 
 # Load JSSConfig module; this defines the jss_config() macro which defines
 # JSS-specific configuration values.

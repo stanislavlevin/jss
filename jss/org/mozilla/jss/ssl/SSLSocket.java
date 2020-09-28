@@ -1095,6 +1095,24 @@ public class SSLSocket extends java.net.Socket {
     }
 
     /**
+     * Enable or disable post-handshake auth for a single socket.
+     */
+    public void enablePostHandshakeAuth(boolean enable)
+    throws SocketException
+    {
+        base.enablePostHandshakeAuth(enable);
+    }
+
+    /**
+     * Sets the default to allow post-handshake auth globally.
+     */
+    public static void enablePostHandshakeAuthDefault(boolean enable)
+    throws SocketException
+    {
+        setSSLDefaultOption(SocketBase.SSL_ENABLE_POST_HANDSHAKE_AUTH, enable);
+    }
+
+    /**
      * @return a String listing the current SSLOptions for this SSLSocket.
      */
     public String getSSLOptions() {
@@ -1488,10 +1506,10 @@ public class SSLSocket extends java.net.Socket {
                 iRet = socketRead(b, off, len, base.getTimeout());
             } catch (SocketTimeoutException ste) {
                 throw new SocketTimeoutException(
-                    "SocketTimeoutException cannot read on socket");
+                    "SocketTimeoutException cannot read on socket: " + ste);
             } catch (IOException ioe) {
                 throw new IOException(
-                    "SocketException cannot read on socket");
+                    "SocketException cannot read on socket: " + ioe.getMessage(), ioe);
             } finally {
                 synchronized (this) {
                     inRead = false;
@@ -1515,10 +1533,10 @@ public class SSLSocket extends java.net.Socket {
                 socketWrite(b, off, len, base.getTimeout());
             } catch (SocketTimeoutException ste) {
                 throw new SocketTimeoutException(
-                    "SocketTimeoutException cannot write on socket");
+                    "SocketTimeoutException cannot write on socket: " + ste);
             } catch (IOException ioe) {
                 throw new IOException(
-                    "SocketException cannot write on socket");
+                    "SocketException cannot write on socket: " + ioe.getMessage(), ioe);
             } finally {
                 synchronized (this) {
                     inWrite = false;

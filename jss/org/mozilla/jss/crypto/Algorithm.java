@@ -244,4 +244,18 @@ public class Algorithm {
 
     // PKCS#11 AES-CMAC
     protected static final int CKM_AES_CMAC=70;
+
+    // Generic Secret
+    protected static final int CKM_GENERIC_SECRET_KEY_GEN=71;
+
+    // PKCS#11 NIST SP800-108 KBKDFs (including NSS variants)
+    protected static final int CKM_SP800_108_COUNTER_KDF=72;
+    protected static final int CKM_SP800_108_FEEDBACK_KDF=73;
+    protected static final int CKM_SP800_108_DOUBLE_PIPELINE_KDF=74;
+    protected static final int CKM_NSS_SP800_108_COUNTER_KDF_DERIVE_DATA=75;
+    protected static final int CKM_NSS_SP800_108_FEEDBACK_KDF_DERIVE_DATA=76;
+    protected static final int CKM_NSS_SP800_108_DOUBLE_PIPELINE_KDF_DERIVE_DATA=77;
+
+    // RSA-PSS
+    protected static final short SEC_OID_PKCS1_RSA_PSS_SIGNATURE = 78;
 }

@@ -5,11 +5,13 @@ import org.mozilla.jss.nss.PRFDProxy;
 import org.mozilla.jss.nss.SSLFDProxy;
 import org.mozilla.jss.nss.SSL;
 import org.mozilla.jss.nss.SecurityStatusResult;
+import org.mozilla.jss.nss.SSLChannelInfo;
+import org.mozilla.jss.nss.SSLPreliminaryChannelInfo;
 
 import org.mozilla.jss.ssl.SSLCipher;
 
 public class TestRawSSL {
-    public static void TestSSLImportFD() {
+    public static void TestSSLImportFD() throws Exception {
         PRFDProxy fd = PR.NewTCPSocket();
         assert(fd != null);
 
@@ -78,7 +80,7 @@ public class TestRawSSL {
         assert(PR.Close(ssl_fd) == PR.SUCCESS);
     }
 
-    public static void TestSSLSetURL() {
+    public static void TestSSLSetURL() throws Exception {
         PRFDProxy fd = PR.NewTCPSocket();
         assert(fd != null);
 
@@ -90,7 +92,7 @@ public class TestRawSSL {
         assert(PR.Close(ssl_fd) == PR.SUCCESS);
     }
 
-    public static void TestSSLSecurityStatus() {
+    public static void TestSSLSecurityStatus() throws Exception {
         PRFDProxy fd = PR.NewTCPSocket();
         assert(fd != null);
 
@@ -98,12 +100,51 @@ public class TestRawSSL {
         assert(ssl_fd != null);
 
         SecurityStatusResult r = SSL.SecurityStatus(ssl_fd);
+        assert(r != null);
         assert(r.on == 0);
+
+        // Validate toString works
+        System.out.println(r.toString());
 
         assert(PR.Close(ssl_fd) == PR.SUCCESS);
     }
 
-    public static void TestSSLResetHandshake() {
+    public static void TestSSLGetChannelInfo() throws Exception {
+        PRFDProxy fd = PR.NewTCPSocket();
+        assert(fd != null);
+
+        SSLFDProxy ssl_fd = SSL.ImportFD(null, fd);
+        assert(ssl_fd != null);
+
+        SSLChannelInfo r = SSL.GetChannelInfo(ssl_fd);
+        assert(r != null);
+        assert(r.getProtocolVersion() == null);
+
+        System.out.println(r.toString());
+
+        assert(PR.Close(ssl_fd) == PR.SUCCESS);
+    }
+
+    public static void TestSSLGetPreliminaryChannelInfo() throws Exception {
+        PRFDProxy fd = PR.NewTCPSocket();
+        assert(fd != null);
+
+        SSLFDProxy ssl_fd = SSL.ImportFD(null, fd);
+        assert(ssl_fd != null);
+
+        SSLPreliminaryChannelInfo r = SSL.GetPreliminaryChannelInfo(ssl_fd);
+        assert(r != null);
+        assert(r.haveProtocolVersion() == false);
+        assert(r.haveCipherSuite() == false);
+        assert(r.haveZeroRttCipherSuite() == false);
+        assert(r.havePeerAuth() == false);
+
+        System.out.println(r.toString());
+
+        assert(PR.Close(ssl_fd) == PR.SUCCESS);
+    }
+
+    public static void TestSSLResetHandshake() throws Exception {
         PRFDProxy fd = PR.NewTCPSocket();
         assert(fd != null);
 
@@ -135,6 +176,12 @@ public class TestRawSSL {
 
         System.out.println("Calling TestSSLSecurityStatus()...");
         TestSSLSecurityStatus();
+
+        System.out.println("Calling TestSSLGetChannelInfo()...");
+        TestSSLGetChannelInfo();
+
+        System.out.println("Calling TestSSLGetPreliminaryChannelInfo()...");
+        TestSSLGetPreliminaryChannelInfo();
 
         System.out.println("Calling TestSSLResetHandshake()...");
         TestSSLResetHandshake();

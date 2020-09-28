@@ -12,8 +12,9 @@
 #include <nss.h>
 #include <ssl.h>
 
-#include <jssutil.h>
-#include <java_ids.h>
+#include "jssutil.h"
+#include "java_ids.h"
+#include "jss_exceptions.h"
 
 static PRIntn
 invalidInt()
@@ -548,9 +549,13 @@ jsock_recv(PRFileDesc *fd, void *buf, PRInt32 amount,
 
         bytes = (*env)->GetByteArrayElements(env, byteArray, NULL);
 
-        memcpy(buf, bytes, retval);
+        if (bytes != NULL) {
+            memcpy(buf, bytes, retval);
 
-        JSS_DerefByteArray(env, byteArray, bytes, JNI_ABORT);
+            JSS_DerefByteArray(env, byteArray, bytes, JNI_ABORT);
+        } else {
+            JSS_throwMsg(env, OUT_OF_MEMORY_ERROR, "Unable to get byte array elements.");
+        }
     }
 
 finish:

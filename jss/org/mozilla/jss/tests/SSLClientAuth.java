@@ -28,7 +28,7 @@ public class SSLClientAuth implements Runnable {
     
     private CryptoManager cm;
     public static final SignatureAlgorithm sigAlg =
-            SignatureAlgorithm.RSASignatureWithSHA1Digest;
+            SignatureAlgorithm.RSASignatureWithSHA256Digest;
     
     /**
      * Method that generates a certificate for given credential
@@ -108,7 +108,6 @@ public class SSLClientAuth implements Runnable {
             System.exit(1);
         }
         
-        CryptoManager.initialize(args[0]);
         cm = CryptoManager.getInstance();
         CryptoToken tok = cm.getInternalKeyStorageToken();
         
@@ -241,6 +240,7 @@ public class SSLClientAuth implements Runnable {
             SSLSocket.enableSSL2Default(false);
             SSLSocket.enableSSL3Default(false);
             /* TLS is enabled by default */
+            SSLSocket.setSSLVersionRangeDefault(SSLProtocolVariant.STREAM, new SSLVersionRange(SSLVersionRange.tls1_2, SSLVersionRange.tls1_2));
 
             /* Enable Session tickets by default */
             SSLSocket.enableSessionTicketsDefault(true);

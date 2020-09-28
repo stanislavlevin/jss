@@ -195,6 +195,7 @@ PR_BEGIN_EXTERN_C
 #define SIG_CONTEXT_PROXY_FIELD "sigContext"
 #define SIG_CONTEXT_PROXY_SIG "Lorg/mozilla/jss/pkcs11/SigContextProxy;"
 #define SIG_ALGORITHM_FIELD "algorithm"
+#define SIG_DIGEST_ALGORITHM_FIELD "digestAlgorithm"
 #define SIG_ALGORITHM_SIG "Lorg/mozilla/jss/crypto/Algorithm;"
 #define SIG_PW_FIELD "pwExtractor"
 #define SIG_PW_SIG "Lorg/mozilla/jss/crypto/PasswordExtractor;"
@@ -393,6 +394,7 @@ PR_BEGIN_EXTERN_C
 #define SSLFD_PROXY_CONSTRUCTOR_SIG "([B)V"
 #define SSLFD_PROXY_CLIENT_CERT_FIELD "clientCert"
 #define SSLFD_PROXY_CLIENT_CERT_SIG "Lorg/mozilla/jss/pkcs11/PK11Cert;"
+#define SSLFD_PROXY_EVENT_LIST_SIG "Ljava/util/ArrayList;"
 
 /*
  * SecurityStatusResult
@@ -405,6 +407,42 @@ PR_BEGIN_EXTERN_C
  */
 #define BUFFER_PROXY_CLASS_NAME "org/mozilla/jss/nss/BufferProxy"
 #define BUFFER_PROXY_CONSTRUCTOR_SIG "([B)V"
+
+/*
+ * GlobalRefProxy
+ */
+#define GLOBAL_REF_PROXY_CLASS_NAME "org/mozilla/jss/util/GlobalRefProxy"
+#define GLOBAL_REF_CONSTRUCTOR_SIG "([B)V"
+
+/*
+ * StaticVoidProxy
+ */
+#define STATIC_VOID_POINTER_CLASS_NAME "org/mozilla/jss/util/StaticVoidPointer"
+#define STATIC_VOID_POINTER_CONSTRUCTOR_SIG "([B)V"
+
+
+/*
+ * PKCS#11 CKAttribute
+ */
+#define CK_ATTRIBUTE_CLASS_NAME "org/mozilla/jss/pkcs11/attrs/CKAttribute"
+
+/*
+ * KBKDF classes
+ */
+#define KBKDF_DATA_PARAMETER_CLASS_NAME "org/mozilla/jss/crypto/KBKDFDataParameter"
+#define KBKDF_DERIVED_KEY_CLASS_NAME "org/mozilla/jss/crypto/KBKDFDerivedKey"
+
+/*
+ * SSLChannelInfo classes
+ */
+#define SSL_CHANNEL_INFO_CLASS_NAME "org/mozilla/jss/nss/SSLChannelInfo"
+#define SSL_CHANNEL_INFO_CONSTRUCTOR_SIG "(IIIIJJJ[BIZZIIIIIIZIZZZ)V"
+
+/*
+ * SSLPreliminaryChannelInfo classes
+ */
+#define SSL_PRELIMINARY_CHANNEL_INFO_CLASS_NAME "org/mozilla/jss/nss/SSLPreliminaryChannelInfo"
+#define SSL_PRELIMINARY_CHANNEL_INFO_CONSTRUCTOR_SIG "(JIIZJZIZZII)V"
 
 PR_END_EXTERN_C
 

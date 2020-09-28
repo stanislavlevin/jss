@@ -1,0 +1,19 @@
+name: Optional Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image:
+          - 'pkcs11check'
+          - 'pki_build'
+
+    steps:
+    - name: Clone the repository
+      uses: actions/checkout@v2
+
+    - name: Build and Run the Docker Image
+      run: bash tools/run_container.sh "${{ matrix.image }}"

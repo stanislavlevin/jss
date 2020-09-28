@@ -19,7 +19,8 @@ import org.slf4j.LoggerFactory;
 
 public class PK11Cert
        extends java.security.cert.X509Certificate
-       implements org.mozilla.jss.crypto.X509Certificate
+       implements org.mozilla.jss.crypto.X509Certificate,
+                  java.lang.AutoCloseable
 {
     public static Logger logger = LoggerFactory.getLogger(PK11Cert.class);
 
@@ -34,6 +35,27 @@ public class PK11Cert
 
     public String getNickname() {
         return nickname;
+    }
+
+    public int hashCode() {
+        try {
+            return Arrays.hashCode(getEncoded());
+        } catch (CertificateEncodingException cee) {
+            throw new RuntimeException(cee.getMessage(), cee);
+        }
+    }
+
+    public boolean equals(Object other) {
+        if (other == null || !(other instanceof PK11Cert)) {
+            return false;
+        }
+
+        PK11Cert p_other = (PK11Cert) other;
+        try {
+            return Arrays.equals(getEncoded(), p_other.getEncoded());
+        } catch (CertificateEncodingException cee) {
+            throw new RuntimeException(cee.getMessage(), cee);
+        }
     }
 
     /**
@@ -367,6 +389,36 @@ public class PK11Cert
             return x509.hasUnsupportedCriticalExtension();
         } catch (Exception e) {
             throw new RuntimeException(e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void finalize() throws Throwable {
+        close();
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (certProxy != null) {
+            try {
+                certProxy.close();
+            } finally {
+                certProxy = null;
+            }
+        }
+
+        // This object also contains a token proxy; these are reference
+        // counted objects and long-lived; freeing them is of little benefit
+        // as they'll persist as long as CryptoManager holds a copy of all
+        // known tokens. However, we still need to attempt to release our
+        // reference to them, otherwise the JVM will persist its reference
+        // to them.
+        if (tokenProxy != null) {
+            try {
+                tokenProxy.close();
+            } finally {
+                tokenProxy = null;
+            }
         }
     }
 

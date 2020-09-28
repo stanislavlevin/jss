@@ -37,6 +37,17 @@ macro(jss_build_globs)
         endif()
     endforeach()
 
+    # Write the Java sources to a file to reduce the size of the javac
+    # command line.
+    list(SORT JAVA_SOURCES)
+    list(SORT JAVA_TEST_SOURCES)
+    jss_list_join(JAVA_SOURCES "\n" JAVA_SOURCES_CONTENTS)
+    jss_list_join(JAVA_TEST_SOURCES "\n" JAVA_TEST_SOURCES_CONTENTS)
+
+    file(WRITE "${JAVA_SOURCES_FILE}" "${JAVA_SOURCES_CONTENTS}")
+    file(WRITE "${JAVA_TEST_SOURCES_FILE}" "${JAVA_TEST_SOURCES_CONTENTS}")
+
+
     file(GLOB_RECURSE _C_HEADERS org/*.h)
     foreach(_C_HEADER ${_C_HEADERS})
         if(${_C_HEADER} MATCHES "mozilla/jss/tests/")
@@ -76,14 +87,14 @@ macro(jss_build_java)
     #   https://gitlab.kitware.com/cmake/community/wikis/FAQ#how-can-i-add-a-dependency-to-a-source-file-which-is-generated-in-a-subdirectory
     add_custom_command(
         OUTPUT "${JNI_OUTPUTS}"
-        COMMAND ${Java_JAVAC_EXECUTABLE} ${JSS_JAVAC_FLAGS} -d ${CLASSES_OUTPUT_DIR} -h ${JNI_OUTPUT_DIR} ${JAVA_SOURCES}
+        COMMAND ${Java_JAVAC_EXECUTABLE} ${JSS_JAVAC_FLAGS} -d ${CLASSES_OUTPUT_DIR} -h ${JNI_OUTPUT_DIR} @${JAVA_SOURCES_FILE}
         COMMAND touch "${JNI_OUTPUTS}"
         DEPENDS ${JAVA_SOURCES}
     )
 
     add_custom_command(
         OUTPUT "${TESTS_JNI_OUTPUTS}"
-        COMMAND ${Java_JAVAC_EXECUTABLE} ${JSS_TEST_JAVAC_FLAGS} -d ${TESTS_CLASSES_OUTPUT_DIR} -h ${TESTS_JNI_OUTPUT_DIR} ${JAVA_TEST_SOURCES}
+        COMMAND ${Java_JAVAC_EXECUTABLE} ${JSS_TEST_JAVAC_FLAGS} -d ${TESTS_CLASSES_OUTPUT_DIR} -h ${TESTS_JNI_OUTPUT_DIR} @${JAVA_TEST_SOURCES_FILE}
         COMMAND touch "${TESTS_JNI_OUTPUTS}"
         DEPENDS ${JAVA_TEST_SOURCES}
     )
@@ -180,15 +191,13 @@ macro(jss_build_jars)
     # JAR.
     add_custom_command(
         OUTPUT "${JSS_BUILD_JAR_PATH}"
-        COMMAND "${Java_JAR_EXECUTABLE}" cmf "${CMAKE_BINARY_DIR}/MANIFEST.MF" ${JSS_BUILD_JAR_PATH} org/*
-        WORKING_DIRECTORY "${CLASSES_OUTPUT_DIR}"
+        COMMAND "${Java_JAR_EXECUTABLE}" cmf "${CMAKE_BINARY_DIR}/MANIFEST.MF" "${JSS_BUILD_JAR_PATH}" -C "${CLASSES_OUTPUT_DIR}" org -C "${CLASSES_OUTPUT_DIR}" META-INF
         DEPENDS generate_java
     )
 
     add_custom_command(
         OUTPUT "${JSS_TESTS_JAR_PATH}"
-        COMMAND "${Java_JAR_EXECUTABLE}" cmf "${CMAKE_BINARY_DIR}/MANIFEST.MF" ${JSS_TESTS_JAR_PATH} org/*
-        WORKING_DIRECTORY "${TESTS_CLASSES_OUTPUT_DIR}"
+        COMMAND "${Java_JAR_EXECUTABLE}" cmf "${CMAKE_BINARY_DIR}/MANIFEST.MF" ${JSS_TESTS_JAR_PATH} -C "${TESTS_CLASSES_OUTPUT_DIR}" org
         DEPENDS generate_java
     )
 
@@ -218,7 +227,7 @@ macro(jss_build_javadocs)
 
     add_custom_command(
         OUTPUT ${JAVADOCS_OUTPUTS}
-        COMMAND "${Java_JAVADOC_EXECUTABLE}" -overview "${PROJECT_SOURCE_DIR}/tools/javadoc/overview.html" -windowtitle "${JSS_WINDOW_TITLE}" -notimestamp -breakiterator -classpath ${JAVAC_CLASSPATH} -sourcepath ${PROJECT_SOURCE_DIR} -d ${DOCS_OUTPUT_DIR} ${JSS_PACKAGES}
+        COMMAND "${Java_JAVADOC_EXECUTABLE}" -source 1.8 -overview "${PROJECT_SOURCE_DIR}/tools/javadoc/overview.html" -windowtitle "${JSS_WINDOW_TITLE}" -notimestamp -breakiterator -classpath ${JAVAC_CLASSPATH} -sourcepath ${PROJECT_SOURCE_DIR} -d ${DOCS_OUTPUT_DIR} @${JAVA_SOURCES_FILE}
         COMMAND touch "${JAVADOCS_OUTPUTS}"
         DEPENDS ${JAVA_SOURCES}
     )

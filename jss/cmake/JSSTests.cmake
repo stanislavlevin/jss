@@ -3,12 +3,6 @@ macro(jss_tests)
 
     jss_tests_compile()
 
-    # Common variables used as arguments to several tests
-    set(JSS_TEST_DIR "${PROJECT_SOURCE_DIR}/org/mozilla/jss/tests")
-    set(PASSWORD_FILE "${JSS_TEST_DIR}/passwords")
-    set(DB_PWD "m1oZilla")
-
-
     # Create directories for test cases:
     #  - results/data
     #  - results/nssdb
@@ -21,10 +15,6 @@ macro(jss_tests)
         NAME "Create_Data_Dir"
         COMMAND "cmake" "-E" "make_directory" "${RESULTS_DATA_OUTPUT_DIR}"
         DEPENDS "Clean_Data_Dir"
-    )
-    jss_test_exec(
-        NAME "TestBufferPRFD"
-        COMMAND "${BIN_OUTPUT_DIR}/TestBufferPRFD"
     )
 
     # Rather than creating our results directories earlier in JSSConfig,
@@ -42,6 +32,7 @@ macro(jss_tests)
         NAME "Setup_DBs"
         COMMAND "org.mozilla.jss.tests.SetupDBs" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
         DEPENDS "Create_Setup_DBs"
+        MODE "NONE"
     )
 
     # Various FIPS related tests depend on FIPS being enabled; since this
@@ -59,12 +50,33 @@ macro(jss_tests)
         NAME "Setup_FIPS_DBs"
         COMMAND "org.mozilla.jss.tests.SetupDBs" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}"
         DEPENDS "Create_FIPS_Setup_DBs"
+        MODE "NONE"
     )
 
+    # NSS DB for internet connected tests; imports global root CA certs.
+    if(TEST_WITH_INTERNET)
+        jss_test_exec(
+            NAME "Clean_Internet_Setup_DBs"
+            COMMAND "cmake" "-E" "remove_directory" "${RESULTS_NSSDB_INTERNET_OUTPUT_DIR}"
+        )
+        jss_test_exec(
+            NAME "Import_Internet_Certs"
+            COMMAND "${CMAKE_SOURCE_DIR}/tools/common_roots.sh" "${RESULTS_NSSDB_INTERNET_OUTPUT_DIR}"
+            DEPENDS "Clean_Internet_Setup_DBs"
+        )
+    endif()
 
+    jss_test_exec(
+        NAME "TestBufferPRFD"
+        COMMAND "${BIN_OUTPUT_DIR}/TestBufferPRFD"
+    )
     jss_test_java(
         NAME "Test_UTF-8_Converter"
         COMMAND "org.mozilla.jss.tests.UTF8ConverterTest"
+    )
+    jss_test_java(
+        NAME "Test_Base64_Parsing"
+        COMMAND "org.mozilla.jss.tests.Base64Parsing"
     )
     jss_test_java(
         NAME "JSS_DER_Encoding_of_Enumeration_regression_test"
@@ -94,6 +106,11 @@ macro(jss_tests)
     jss_test_java(
         NAME "JSS_Test_Buffer"
         COMMAND "org.mozilla.jss.tests.TestBuffer"
+    )
+    jss_test_java(
+        NAME "JSS_Test_GlobalRefProxy"
+        COMMAND "org.mozilla.jss.tests.TestGlobalReference"
+        MODE "NONE"
     )
     if ((${Java_VERSION_MAJOR} EQUAL 1) AND (${Java_VERSION_MINOR} LESS 9))
         jss_test_java(
@@ -136,6 +153,10 @@ macro(jss_tests)
         DEPENDS "generate_c_buffer_size_4"
     )
     jss_test_java(
+        NAME "JUnit_CertificateChainTest"
+        COMMAND "org.junit.runner.JUnitCore" "org.mozilla.jss.tests.CertificateChainTest"
+    )
+    jss_test_java(
         NAME "JUnit_ChainSortingTest"
         COMMAND "org.junit.runner.JUnitCore" "org.mozilla.jss.tests.ChainSortingTest"
     )
@@ -149,11 +170,6 @@ macro(jss_tests)
         COMMAND "org.mozilla.jss.tests.GenerateTestCert" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}" "30" "localhost" "SHA-256/EC" "CA_ECDSA" "Server_ECDSA" "Client_ECDSA"
         DEPENDS "Generate_known_RSA_cert_pair"
     )
-    jss_test_java(
-        NAME "Generate_known_DSS_cert_pair"
-        COMMAND "org.mozilla.jss.tests.GenerateTestCert" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}" "40" "localhost" "SHA-1/DSA" "CA_DSS" "Server_DSS" "Client_DSS"
-        DEPENDS "Generate_known_ECDSA_cert_pair"
-    )
     jss_test_exec(
         NAME "Create_PKCS11_cert_to_PKCS12_rsa.pfx"
         COMMAND "pk12util" "-o" "${RESULTS_NSSDB_OUTPUT_DIR}/rsa.pfx" "-n" "CA_RSA" "-d" "${RESULTS_NSSDB_OUTPUT_DIR}" "-K" "${DB_PWD}" "-W" "${DB_PWD}"
@@ -164,15 +180,10 @@ macro(jss_tests)
         COMMAND "pk12util" "-o" "${RESULTS_NSSDB_OUTPUT_DIR}/ecdsa.pfx" "-n" "CA_ECDSA" "-d" "${RESULTS_NSSDB_OUTPUT_DIR}" "-K" "${DB_PWD}" "-W" "${DB_PWD}"
         DEPENDS "Generate_known_ECDSA_cert_pair"
     )
-    jss_test_exec(
-        NAME "Create_PKCS11_cert_to_PKCS12_dss.pfx"
-        COMMAND "pk12util" "-o" "${RESULTS_NSSDB_OUTPUT_DIR}/dss.pfx" "-n" "CA_DSS" "-d" "${RESULTS_NSSDB_OUTPUT_DIR}" "-K" "${DB_PWD}" "-W" "${DB_PWD}"
-        DEPENDS "Generate_known_DSS_cert_pair"
-    )
     jss_test_java(
         NAME "List_CA_certs"
-        COMMAND "org.mozilla.jss.tests.ListCACerts" "${RESULTS_NSSDB_OUTPUT_DIR}"
-        DEPENDS "Generate_known_DSS_cert_pair"
+        COMMAND "org.mozilla.jss.tests.ListCACerts" "${RESULTS_NSSDB_OUTPUT_DIR}" "Verbose"
+        DEPENDS "Generate_known_ECDSA_cert_pair"
     )
     jss_test_java(
         NAME "SSLClientAuth"
@@ -235,9 +246,9 @@ macro(jss_tests)
         DEPENDS "Setup_DBs"
     )
     jss_test_java(
-        NAME "JSSProvider"
-        COMMAND "org.mozilla.jss.tests.JSSProvider" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
-        DEPENDS "List_CA_certs"
+        NAME "Symmetric_Key_Deriving"
+        COMMAND "org.mozilla.jss.tests.SymKeyDeriving" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
+        DEPENDS "Setup_DBs"
     )
     jss_test_java(
         NAME "X509CertTest"
@@ -247,7 +258,22 @@ macro(jss_tests)
     jss_test_java(
         NAME "KeyStoreTest"
         COMMAND "org.mozilla.jss.tests.KeyStoreTest" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}" getAliases
+        DEPENDS "List_CA_certs" "X509CertTest" "Secret_Key_Generation" "Symmetric_Key_Deriving" "SSLClientAuth"
+    )
+    jss_test_java(
+        NAME "JSSProvider"
+        COMMAND "org.mozilla.jss.tests.JSSProvider" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
+        DEPENDS "List_CA_certs" "X509CertTest" "Secret_Key_Generation" "Symmetric_Key_Deriving" "SSLClientAuth"
+    )
+    jss_test_java(
+        NAME "SSLEngine_RSA"
+        COMMAND "org.mozilla.jss.tests.TestSSLEngine" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}" "Client_RSA" "Server_RSA"
         DEPENDS "List_CA_certs"
+    )
+    jss_test_java(
+        NAME "SSLEngine_ECDSA"
+        COMMAND "org.mozilla.jss.tests.TestSSLEngine" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}" "Client_ECDSA" "Server_ECDSA"
+        DEPENDS "SSLEngine_RSA"
     )
 
     if(NOT FIPS_ENABLED)
@@ -265,6 +291,13 @@ macro(jss_tests)
             jss_test_java(
                 NAME "CMAC_Test"
                 COMMAND "org.mozilla.jss.tests.TestCmac" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
+                DEPENDS "Setup_DBs"
+            )
+        endif()
+        if(HAVE_NSS_KBKDF)
+            jss_test_java(
+                NAME "KBKDF_Test"
+                COMMAND "org.mozilla.jss.tests.TestKBKDF" "${RESULTS_NSSDB_OUTPUT_DIR}" "${PASSWORD_FILE}"
                 DEPENDS "Setup_DBs"
             )
         endif()
@@ -293,39 +326,83 @@ macro(jss_tests)
 
         # FIPS-related tests
         jss_test_java(
+            NAME "Generate_FIPS_known_RSA_cert_pair"
+            COMMAND "org.mozilla.jss.tests.GenerateTestCert" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}" "70" "localhost" "SHA-256/RSA" "CA_RSA" "Server_RSA" "Client_RSA"
+            DEPENDS "Setup_FIPS_DBs"
+            MODE "FIPS"
+        )
+        jss_test_java(
+            NAME "Generate_FIPS_known_ECDSA_cert_pair"
+            COMMAND "org.mozilla.jss.tests.GenerateTestCert" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}" "80" "localhost" "SHA-256/EC" "CA_ECDSA" "Server_ECDSA" "Client_ECDSA"
+            DEPENDS "Generate_FIPS_known_RSA_cert_pair"
+            MODE "FIPS"
+        )
+        jss_test_java(
             NAME "Enable_FipsMODE"
             COMMAND "org.mozilla.jss.tests.FipsTest" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "enable"
-            DEPENDS "Setup_FIPS_DBs"
+            DEPENDS "Generate_FIPS_known_ECDSA_cert_pair"
+            MODE "NONE"
         )
         jss_test_java(
             NAME "check_FipsMODE"
             COMMAND "org.mozilla.jss.tests.FipsTest" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "chkfips"
             DEPENDS "Enable_FipsMODE"
+            MODE "NONE"
         )
-        jss_test_java(
-            NAME "SSLClientAuth_FIPSMODE"
-            COMMAND "org.mozilla.jss.tests.SSLClientAuth" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}" "${JSS_TEST_PORT_CLIENTAUTH_FIPS}" "60"
-            DEPENDS "Enable_FipsMODE"
-        )
+
+        # The current version of NSS features partial support for TLS 1.3 in
+        # FIPS mode.
+        if (NOT SANDBOX)
+            jss_test_java(
+                NAME "SSLClientAuth_FIPSMODE"
+                COMMAND "org.mozilla.jss.tests.SSLClientAuth" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}" "${JSS_TEST_PORT_CLIENTAUTH_FIPS}" "60"
+                DEPENDS "Enable_FipsMODE"
+                MODE "FIPS"
+            )
+        else()
+            jss_test_java(
+                NAME "SSLClientAuth_FIPSMODE"
+                COMMAND "org.mozilla.jss.tests.JSSProvider"
+                DEPENDS "Enable_FipsMODE"
+                MODE "FIPS"
+            )
+        endif()
+
         jss_test_java(
             NAME "HMAC_FIPSMODE"
             COMMAND "org.mozilla.jss.tests.CrossHMACTest" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}"
             DEPENDS "Enable_FipsMODE"
+            MODE "FIPS"
         )
         jss_test_java(
             NAME "KeyWrapping_FIPSMODE"
             COMMAND "org.mozilla.jss.tests.JCAKeyWrap" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}"
             DEPENDS "Enable_FipsMODE"
+            MODE "FIPS"
         )
         jss_test_java(
             NAME "Mozilla_JSS_JCA_Signature_FIPSMODE"
             COMMAND "org.mozilla.jss.tests.JCASigTest" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}"
             DEPENDS "Enable_FipsMODE"
+            MODE "FIPS"
         )
         jss_test_java(
             NAME "JSS_Signature_test_FipsMODE"
             COMMAND "org.mozilla.jss.tests.SigTest" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}"
             DEPENDS "Enable_FipsMODE"
+            MODE "FIPS"
+        )
+        jss_test_java(
+            NAME "SSLEngine_RSA_FIPSMODE"
+            COMMAND "org.mozilla.jss.tests.TestSSLEngine" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}" "Client_RSA" "Server_RSA"
+            DEPENDS "Enable_FipsMODE" "SSLEngine_ECDSA"
+            MODE "FIPS"
+        )
+        jss_test_java(
+            NAME "SSLEngine_ECDSA_FIPSMODE"
+            COMMAND "org.mozilla.jss.tests.TestSSLEngine" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "${PASSWORD_FILE}" "Client_ECDSA" "Server_ECDSA"
+            DEPENDS "SSLEngine_RSA_FIPSMODE" "SSLEngine_ECDSA"
+            MODE "FIPS"
         )
 
         # Since we need to disable FIPS mode _after_ all FIPS-mode tests have
@@ -334,7 +411,8 @@ macro(jss_tests)
         jss_test_java(
             NAME "Disable_FipsMODE"
             COMMAND "org.mozilla.jss.tests.FipsTest" "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}" "disable"
-            DEPENDS "check_FipsMODE" "SSLClientAuth_FIPSMODE" "HMAC_FIPSMODE" "KeyWrapping_FIPSMODE" "Mozilla_JSS_JCA_Signature_FIPSMODE" "JSS_Signature_test_FipsMODE"
+            DEPENDS "check_FipsMODE" "SSLClientAuth_FIPSMODE" "HMAC_FIPSMODE" "KeyWrapping_FIPSMODE" "Mozilla_JSS_JCA_Signature_FIPSMODE" "JSS_Signature_test_FipsMODE" "SSLEngine_RSA_FIPSMODE" "SSLEngine_ECDSA_FIPSMODE"
+            MODE "NONE"
         )
     endif()
 
@@ -351,8 +429,22 @@ macro(jss_tests)
         COMMAND "org.junit.runner.JUnitCore" "org.mozilla.jss.tests.PrintableConverterTest"
     )
 
+    if(TEST_WITH_INTERNET)
+        jss_test_java(
+            NAME "BadSSL"
+            COMMAND "org.mozilla.jss.tests.BadSSL" "${RESULTS_NSSDB_INTERNET_OUTPUT_DIR}"
+            DEPENDS "Import_Internet_Certs"
+            MODE "INTERNET"
+        )
+        jss_test_java(
+            NAME "BadSSL_Leaf_And_Chain"
+            COMMAND "org.mozilla.jss.tests.BadSSL" "${RESULTS_NSSDB_INTERNET_OUTPUT_DIR}" "LEAF_AND_CHAIN"
+            DEPENDS "Import_Internet_Certs"
+            MODE "INTERNET"
+        )
+    endif()
 
-    # For compliance with several
+    # For compliance with several existing clients
     add_custom_target(
         check
         DEPENDS test
@@ -389,7 +481,7 @@ endmacro()
 
 function(jss_test_java)
     set(TEST_FLAGS "NAME")
-    set(TEST_ARGS  "COMMAND" "DEPENDS")
+    set(TEST_ARGS  "COMMAND" "DEPENDS" "MODE")
     cmake_parse_arguments(TEST_JAVA "" "${TEST_FLAGS}" "${TEST_ARGS}" ${ARGN})
 
     list(APPEND EXEC_COMMAND "${Java_JAVA_EXECUTABLE}")
@@ -397,6 +489,16 @@ function(jss_test_java)
     list(APPEND EXEC_COMMAND "${TEST_CLASSPATH}")
     list(APPEND EXEC_COMMAND "-ea")
     list(APPEND EXEC_COMMAND "-Djava.library.path=${CMAKE_BINARY_DIR}")
+    if(TEST_JAVA_MODE STREQUAL "FIPS")
+        list(APPEND EXEC_COMMAND "-Djava.security.properties=${CONFIG_OUTPUT_DIR}/fips.security")
+    elseif(TEST_JAVA_MODE STREQUAL "INTERNET")
+        list(APPEND EXEC_COMMAND "-Djava.security.properties=${CONFIG_OUTPUT_DIR}/internet.security")
+    elseif(NOT TEST_JAVA_MODE STREQUAL "NONE")
+        list(APPEND EXEC_COMMAND "-Djava.security.properties=${CONFIG_OUTPUT_DIR}/java.security")
+    endif()
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        list(APPEND EXEC_COMMAND "-Djava.util.logging.config.file=${PROJECT_SOURCE_DIR}/tools/logging.properties")
+    endif()
     set(EXEC_COMMAND "${EXEC_COMMAND};${TEST_JAVA_COMMAND}")
 
     if(TEST_JAVA_DEPENDS)
@@ -431,24 +533,39 @@ macro(jss_test_exec)
     set(TEST_ARGS  "COMMAND" "DEPENDS")
     cmake_parse_arguments(TEST_EXEC "" "${TEST_FLAGS}" "${TEST_ARGS}" ${ARGN})
 
+    if(TEST_VALGRIND)
+        list(INSERT TEST_EXEC_COMMAND 0 "valgrind" "--track-origins=yes" "--leak-check=full")
+    endif()
+
     add_test(
         NAME "${TEST_EXEC_NAME}"
         COMMAND ${TEST_EXEC_COMMAND}
     )
 
+    list(APPEND LD_LIBRARY ${NSS_LIBRARIES})
+    list(APPEND LD_LIBRARY ${NSPR_LIBRARIES})
+
     # If we are calling a java program, use the versioned library to ensure
     # that any new JNI calls are made visible.
     if(TEST_EXEC_LIBRARY AND (TEST_EXEC_LIBRARY STREQUAL "java"))
+        list(APPEND LD_LIBRARY "${CMAKE_BINARY_DIR}")
+        list(REMOVE_DUPLICATES LD_LIBRARY)
+        jss_list_join(LD_LIBRARY ":" LD_LIBRARY_PATH)
+
         set_tests_properties(
             "${TEST_EXEC_NAME}"
             PROPERTIES ENVIRONMENT
-            "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}"
+            "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
         )
     else()
+        list(APPEND LD_LIBRARY "${LIB_OUTPUT_DIR}")
+        list(REMOVE_DUPLICATES LD_LIBRARY)
+        jss_list_join(LD_LIBRARY ":" LD_LIBRARY_PATH)
+
         set_tests_properties(
             "${TEST_EXEC_NAME}"
             PROPERTIES ENVIRONMENT
-            "LD_LIBRARY_PATH=${LIB_OUTPUT_DIR}"
+            "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
         )
     endif()
     if(TEST_EXEC_DEPENDS)

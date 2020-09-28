@@ -3,7 +3,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss;
 
+import java.lang.NullPointerException;
+import java.security.Provider;
+
+import java.io.InputStream;
+
 public final class JSSProvider extends java.security.Provider {
+    public static boolean ENABLE_JSSENGINE = true;
 
     private static final long serialVersionUID = 1L;
     /********************************************************************/
@@ -18,10 +24,72 @@ public final class JSSProvider extends java.security.Provider {
                                            (JSS_MINOR_VERSION * 100 +
                                             JSS_PATCH_VERSION)/10000.0;
 
+    private static JSSLoader loader = new JSSLoader();
+
+    private static CryptoManager cm;
+
     public JSSProvider() {
+        this(CryptoManager.isInitialized());
+    }
+
+    public JSSProvider(boolean initialize) {
         super("Mozilla-JSS", JSS_VERSION,
                 "Provides Signature, Message Digesting, and RNG");
 
+        if (initialize) {
+            initializeProvider();
+        }
+    }
+
+    public JSSProvider(String config_path) throws Exception {
+        this(false);
+
+        configure(config_path);
+    }
+
+    public JSSProvider(InputStream config) throws Exception {
+        this(false);
+
+        cm = loader.init(config);
+        initializeProvider();
+    }
+
+    /**
+     * Configure this instance of JSSProvider with the specified path
+     * to a JSS configuration properties file.
+     *
+     * See JSSLoader's class description for a description of the JSS
+     * configuration properties file and known values.
+     *
+     * If the JSSProvider is already loaded, this is a no-op.
+     */
+    public Provider configure(String arg) {
+        try {
+            cm = loader.init(arg);
+        } catch (NullPointerException npe) {
+            throw npe;
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+
+        initializeProvider();
+
+        return this;
+    }
+
+    /**
+     * Return the CryptoManager this instance was initialized with.
+     */
+    public CryptoManager getCryptoManager() {
+        if (cm == null) {
+            try {
+                cm = CryptoManager.getInstance();
+            } catch (NotInitializedException nie) {}
+        }
+        return cm;
+    }
+
+    protected void initializeProvider() {
         /////////////////////////////////////////////////////////////
         // Signature
         /////////////////////////////////////////////////////////////
@@ -52,6 +120,28 @@ public final class JSSProvider extends java.security.Provider {
             "org.mozilla.jss.provider.java.security.JSSSignatureSpi$SHA256RSA");
         put("Alg.Alias.Signature.SHA256/RSA", "SHA-256/RSA");
         put("Alg.Alias.Signature.SHA256withRSA", "SHA-256/RSA");
+
+        put("Signature.RSASSA-PSS",
+            "org.mozilla.jss.provider.java.security.JSSSignatureSpi$RSAPSSSignature");
+
+        put("Alg.Alias.Signature.1.2.840.113549.1.1.10",     "RSASSA-PSS");
+        put("Alg.Alias.Signature.OID.1.2.840.113549.1.1.10", "RSASSA-PSS");
+
+        put("Signature.SHA-256/RSA/PSS",
+            "org.mozilla.jss.provider.java.security.JSSSignatureSpi$SHA256RSAPSS");
+
+        put("Alg.Alias.Signature.SHA256withRSA/PSS","SHA-256/RSA/PSS");
+
+        put("Signature.SHA-384/RSA/PSS",
+            "org.mozilla.jss.provider.java.security.JSSSignatureSpi$SHA384RSAPSS");
+
+        put("Alg.Alias.Signature.SHA384withRSA/PSS","SHA-384/RSA/PSS");
+
+        put("Signature.SHA-512/RSA/PSS",
+            "org.mozilla.jss.provider.java.security.JSSSignatureSpi$SHA512RSAPSS");
+
+        put("Alg.Alias.Signature.SHA512withRSA/PSS","SHA-512/RSA/PSS");
+
 
         put("Signature.SHA-384/RSA",
             "org.mozilla.jss.provider.java.security.JSSSignatureSpi$SHA384RSA");
@@ -156,6 +246,9 @@ public final class JSSProvider extends java.security.Provider {
         put("AlgorithmParameters.RC2AlgorithmParameters",
             "org.mozilla.jss.provider.java.security.RC2AlgorithmParameters");
 
+        put("AlgorithmParameters.RSAPSSAlgorithmParameters",
+            "org.mozilla.jss.provider.java.security.RSAPSSAlgorithmParameters");
+
         /////////////////////////////////////////////////////////////
         // Cipher
         /////////////////////////////////////////////////////////////
@@ -176,25 +269,71 @@ public final class JSSProvider extends java.security.Provider {
         /////////////////////////////////////////////////////////////
         // KeyGenerator
         /////////////////////////////////////////////////////////////
-        put("KeyGenerator.DES",
-            "org.mozilla.jss.provider.javax.crypto.JSSKeyGeneratorSpi$DES");
-        put("KeyGenerator.DESede",
-            "org.mozilla.jss.provider.javax.crypto.JSSKeyGeneratorSpi$DESede");
+        String kg_spi = "org.mozilla.jss.provider.javax.crypto.JSSKeyGeneratorSpi";
+
+        put("KeyGenerator.DES", kg_spi + "$DES");
+        put("KeyGenerator.DESede", kg_spi + "$DESede");
         put("Alg.Alias.KeyGenerator.DES3", "DESede");
-        put("KeyGenerator.AES",
-            "org.mozilla.jss.provider.javax.crypto.JSSKeyGeneratorSpi$AES");
-        put("KeyGenerator.RC4",
-            "org.mozilla.jss.provider.javax.crypto.JSSKeyGeneratorSpi$RC4");
-        put("KeyGenerator.RC2",
-            "org.mozilla.jss.provider.javax.crypto.JSSKeyGeneratorSpi$RC2");
-        put("KeyGenerator.HmacSHA1",
-           "org.mozilla.jss.provider.javax.crypto.JSSKeyGeneratorSpi$HmacSHA1");
-        put("KeyGenerator.PBAHmacSHA1",
-           "org.mozilla.jss.provider.javax.crypto.JSSKeyGeneratorSpi$PBAHmacSHA1");
+        put("KeyGenerator.AES", kg_spi + "$AES");
+        put("KeyGenerator.RC4", kg_spi + "$RC4");
+        put("KeyGenerator.RC2", kg_spi + "$RC2");
+        put("KeyGenerator.HmacSHA1", kg_spi + "$HmacSHA1");
+        put("KeyGenerator.PBAHmacSHA1", kg_spi + "$PBAHmacSHA1");
+        put("KeyGenerator.HmacSHA256", kg_spi + "$HmacSHA256");
+        put("KeyGenerator.HmacSHA384", kg_spi + "$HmacSHA384");
+        put("KeyGenerator.HmacSHA512", kg_spi + "$HmacSHA512");
+        // KBKDF: Counter
+        put("KeyGenerator.KbkdfCounter", kg_spi + "$KbkdfCounter");
+        put("Alg.Alias.KeyGenerator.KBKDF-Counter", "KbkdfCounter");
+        put("Alg.Alias.KeyGenerator.SP800-108-KDF-Counter", "KbkdfCounter");
+        put("Alg.Alias.KeyGenerator.SP800-108-Counter", "KbkdfCounter");
+        put("Alg.Alias.KeyGenerator.CounterKbkdf", "KbkdfCounter");
+        // KBKDF: Counter (data)
+        put("KeyGenerator.KbkdfCounterData", kg_spi + "$KbkdfCounterData");
+        put("Alg.Alias.KeyGenerator.KBKDF-Counter-Data", "KbkdfCounterData");
+        put("Alg.Alias.KeyGenerator.SP800-108-KDF-Counter-Data", "KbkdfCounterData");
+        put("Alg.Alias.KeyGenerator.SP800-108-Counter-Data", "KbkdfCounterData");
+        put("Alg.Alias.KeyGenerator.CounterKbkdf-Data", "KbkdfCounterData");
+        // KBKDF: Feedback
+        put("KeyGenerator.KbkdfFeedback", kg_spi + "$KbkdfFeedback");
+        put("Alg.Alias.KeyGenerator.KBKDF-Feedback", "KbkdfFeedback");
+        put("Alg.Alias.KeyGenerator.SP800-108-KDF-Feedback", "KbkdfFeedback");
+        put("Alg.Alias.KeyGenerator.SP800-108-Feedback", "KbkdfFeedback");
+        put("Alg.Alias.KeyGenerator.FeedbackKbkdf", "KbkdfFeedback");
+        // KBKDF: Feedback (data)
+        put("KeyGenerator.KbkdfFeedbackData", kg_spi + "$KbkdfFeedbackData");
+        put("Alg.Alias.KeyGenerator.KBKDF-Feedback-Data", "KbkdfFeedbackData");
+        put("Alg.Alias.KeyGenerator.SP800-108-KDF-Feedback-Data", "KbkdfFeedbackData");
+        put("Alg.Alias.KeyGenerator.SP800-108-Feedback-Data", "KbkdfFeedbackData");
+        put("Alg.Alias.KeyGenerator.FeedbackKbkdf-Data", "KbkdfFeedbackData");
+        // KBKDF: Double Pipeline -- sometimes Pipeline KBKDF
+        put("KeyGenerator.KbkdfDoublePipeline", kg_spi + "$KbkdfDoublePipeline");
+        put("Alg.Alias.KeyGenerator.KBKDF-DoublePipeline", "KbkdfDoublePipeline");
+        put("Alg.Alias.KeyGenerator.SP800-108-KDF-DoublePipeline", "KbkdfDoublePipeline");
+        put("Alg.Alias.KeyGenerator.SP800-108-DoublePipeline", "KbkdfDoublePipeline");
+        put("Alg.Alias.KeyGenerator.DoublePipelineKbkdf", "KbkdfDoublePipeline");
+        put("Alg.Alias.KeyGenerator.KbkdfPipeline", "KbkdfDoublePipeline");
+        put("Alg.Alias.KeyGenerator.KBKDF-Pipeline", "KbkdfDoublePipeline");
+        put("Alg.Alias.KeyGenerator.SP800-108-KDF-Pipeline", "KbkdfDoublePipeline");
+        put("Alg.Alias.KeyGenerator.SP800-108-Pipeline", "KbkdfDoublePipeline");
+        put("Alg.Alias.KeyGenerator.PipelineKbkdf", "KbkdfDoublePipeline");
+        // KBKDF: Double Pipeline (data) -- sometimes Pipeline KBKDF (data)
+        put("KeyGenerator.KbkdfDoublePipelineData", kg_spi + "$KbkdfDoublePipelineData");
+        put("Alg.Alias.KeyGenerator.KBKDF-DoublePipeline-Data", "KbkdfDoublePipelineData");
+        put("Alg.Alias.KeyGenerator.SP800-108-KDF-DoublePipeline-Data", "KbkdfDoublePipelineData");
+        put("Alg.Alias.KeyGenerator.SP800-108-DoublePipeline-Data", "KbkdfDoublePipelineData");
+        put("Alg.Alias.KeyGenerator.DoublePipelineKbkdf-Data", "KbkdfDoublePipelineData");
+        put("Alg.Alias.KeyGenerator.KbkdfPipelineData", "KbkdfDoublePipelineData");
+        put("Alg.Alias.KeyGenerator.KBKDF-Pipeline-Data", "KbkdfDoublePipelineData");
+        put("Alg.Alias.KeyGenerator.SP800-108-KDF-Pipeline-Data", "KbkdfDoublePipelineData");
+        put("Alg.Alias.KeyGenerator.SP800-108-Pipeline-Data", "KbkdfDoublePipelineData");
+        put("Alg.Alias.KeyGenerator.PipelineKbkdf-Data", "KbkdfDoublePipelineData");
 
         /////////////////////////////////////////////////////////////
         // SecretKeyFactory
         /////////////////////////////////////////////////////////////
+        put("SecretKeyFactory.GenericSecret", "org.mozilla.jss.provider.javax.crypto.JSSSecretKeyFactorySpi$GenericSecret");
+        put("Alg.Alias.SecretKeyFactory.GENERIC_SECRET", "GenericSecret");
         put("SecretKeyFactory.DES",
             "org.mozilla.jss.provider.javax.crypto.JSSSecretKeyFactorySpi$DES");
         put("SecretKeyFactory.DESede",
@@ -275,10 +414,22 @@ public final class JSSProvider extends java.security.Provider {
         put("Alg.Alias.TrustManagerFactory.PKIX", "NssX509");
         put("Alg.Alias.TrustManagerFactory.X509", "NssX509");
         put("Alg.Alias.TrustManagerFactory.X.509", "NssX509");
+
+        /////////////////////////////////////////////////////////////
+        // TLS
+        /////////////////////////////////////////////////////////////
+        if (ENABLE_JSSENGINE) {
+            put("SSLContext.Default", "org.mozilla.jss.provider.javax.net.JSSContextSpi");
+            put("SSLContext.SSL", "org.mozilla.jss.provider.javax.net.JSSContextSpi");
+            put("SSLContext.TLS", "org.mozilla.jss.provider.javax.net.JSSContextSpi");
+            put("SSLContext.TLSv1.1", "org.mozilla.jss.provider.javax.net.JSSContextSpi$TLSv11");
+            put("SSLContext.TLSv1.2", "org.mozilla.jss.provider.javax.net.JSSContextSpi$TLSv12");
+            put("SSLContext.TLSv1.3", "org.mozilla.jss.provider.javax.net.JSSContextSpi$TLSv13");
+        }
     }
 
     public String toString() {
-        String mozillaProviderVersion = JSS_MAJOR_VERSION + "." + 
+        String mozillaProviderVersion = JSS_MAJOR_VERSION + "." +
                                         JSS_MINOR_VERSION;
         if ( JSS_PATCH_VERSION != 0 ) {
             mozillaProviderVersion = mozillaProviderVersion + "." +

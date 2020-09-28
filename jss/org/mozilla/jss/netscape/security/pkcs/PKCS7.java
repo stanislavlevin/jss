@@ -33,14 +33,12 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Vector;
 
-import org.apache.commons.codec.binary.Base64;
-
-import org.mozilla.jss.netscape.security.util.Utils;
 import org.mozilla.jss.netscape.security.util.BigInt;
 import org.mozilla.jss.netscape.security.util.DerInputStream;
 import org.mozilla.jss.netscape.security.util.DerOutputStream;
 import org.mozilla.jss.netscape.security.util.DerValue;
 import org.mozilla.jss.netscape.security.util.ObjectIdentifier;
+import org.mozilla.jss.netscape.security.util.Utils;
 import org.mozilla.jss.netscape.security.x509.AlgorithmId;
 import org.mozilla.jss.netscape.security.x509.X500Name;
 import org.mozilla.jss.netscape.security.x509.X509CertImpl;
@@ -167,7 +165,7 @@ public class PKCS7 {
             }
         }
 
-        byte[] bytes = Base64.decodeBase64(sb.toString());
+        byte[] bytes = Utils.base64decode(sb.toString());
         parse(new DerInputStream(bytes));
     }
 
@@ -207,6 +205,15 @@ public class PKCS7 {
         this.contentInfo = contentInfo;
         this.certificates = certificates;
         this.signerInfos = signerInfos;
+    }
+
+    /**
+     * Construct PKCS7 from an array of certificates.
+     *
+     * @param certs Array of certificates.
+     */
+    public PKCS7(X509Certificate[] certs) {
+        this(new AlgorithmId[0], new ContentInfo(new byte[0]), certs, new SignerInfo[0]);
     }
 
     private void parseSignedData(DerValue val)

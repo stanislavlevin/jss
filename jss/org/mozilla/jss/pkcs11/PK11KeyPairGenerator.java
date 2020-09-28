@@ -14,16 +14,21 @@ import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.DSAParameterSpec;
 import java.security.spec.ECGenParameterSpec;
+import java.security.spec.RSAKeyGenParameterSpec;
 import java.util.Hashtable;
 
 import org.mozilla.jss.asn1.ASN1Util;
 import org.mozilla.jss.asn1.OBJECT_IDENTIFIER;
 import org.mozilla.jss.crypto.KeyPairAlgorithm;
+import org.mozilla.jss.crypto.Policy;
 import org.mozilla.jss.crypto.PQGParams;
 import org.mozilla.jss.crypto.RSAParameterSpec;
 import org.mozilla.jss.crypto.TokenException;
 import org.mozilla.jss.util.Assert;
 import org.mozilla.jss.util.ECCurve;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A Key Pair Generator implemented using PKCS #11.
@@ -33,6 +38,7 @@ import org.mozilla.jss.util.ECCurve;
 public final class PK11KeyPairGenerator
     extends org.mozilla.jss.crypto.KeyPairGeneratorSpi
 {
+    public static Logger logger = LoggerFactory.getLogger(PK11KeyPairGenerator.class);
 
     // curve code for getting the actual EC curve
     private enum ECCurve_Code {
@@ -417,13 +423,12 @@ public final class PK11KeyPairGenerator
         }
 
         if(algorithm == KeyPairAlgorithm.RSA) {
-            if(! (params instanceof RSAParameterSpec) ) {
+            if (!(params instanceof RSAKeyGenParameterSpec)) {
                 throw new InvalidAlgorithmParameterException();
             }
 
             // Security library stores public exponent in an unsigned long
-            if( ((RSAParameterSpec)params).getPublicExponent().bitLength()
-                                                                        > 31) {
+            if (((RSAKeyGenParameterSpec)params).getPublicExponent().bitLength() > 31) {
                 throw new InvalidAlgorithmParameterException(
                         "RSA Public Exponent must fit in 31 or fewer bits.");
             }
@@ -468,10 +473,35 @@ public final class PK11KeyPairGenerator
     {
         if(algorithm == KeyPairAlgorithm.RSA) {
             if(params != null) {
-                RSAParameterSpec rsaparams = (RSAParameterSpec)params;
+                RSAKeyGenParameterSpec rsaparams = (RSAKeyGenParameterSpec)params;
+
+                if (rsaparams.getKeysize() < Policy.RSA_MINIMUM_KEY_SIZE) {
+                    String msg = "unsafe RSA key size of ";
+                    msg += rsaparams.getKeysize() + ". Policy.RSA_MINIMUM_KEY_SIZE ";
+                    msg += "dictates a minimum of " + Policy.RSA_MINIMUM_KEY_SIZE;
+
+                    if (Policy.ENFORCING_KEY_SIZES) {
+                        throw new TokenException("Disallowing " + msg);
+                    } else {
+                        logger.warn("Ignored jss.crypto.Policy violation: " + msg);
+                    }
+                }
+                if (rsaparams.getPublicExponent().longValue() < Policy.RSA_MINIMUM_PUBLIC_EXPONENT.longValue()) {
+                    String msg = "unsafe RSA exponent of ";
+                    msg += rsaparams.getPublicExponent().longValue() + ". ";
+                    msg += "Policy.RSA_MINIMUM_PUBLIC_EXPONENT dictates a minimum of ";
+                    msg += Policy.RSA_MINIMUM_PUBLIC_EXPONENT.longValue();
+
+                    if (Policy.ENFORCING_KEY_SIZES) {
+                        throw new TokenException("Disallowing " + msg);
+                    } else {
+                        logger.warn("Ignored jss.crypto.Policy violation: " + msg);
+                    }
+                }
+
                 return generateRSAKeyPairWithOpFlags(
                                     token,
-                                    rsaparams.getKeySize(),
+                                    rsaparams.getKeysize(),
                                     rsaparams.getPublicExponent().longValue(),
                                     temporaryPairMode,
                                     sensitivePairMode,

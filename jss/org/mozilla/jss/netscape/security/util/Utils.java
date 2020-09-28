@@ -32,11 +32,10 @@ import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.text.SimpleDateFormat;
+import java.util.Base64;
 import java.util.Date;
 import java.util.StringTokenizer;
 import java.util.Vector;
-
-import org.apache.commons.codec.binary.Base64;
 
 public class Utils {
     /**
@@ -211,11 +210,13 @@ public class Utils {
 
     public static String HexEncode(byte data[]) {
         StringBuffer sb = new StringBuffer();
-        for (int i = 0; i < data.length; i++) {
-            if ((data[i] & 0xff) < 16) {
-                sb.append("0");
+        if (data != null) {
+            for (int i = 0; i < data.length; i++) {
+                if ((data[i] & 0xff) < 16) {
+                    sb.append("0");
+                }
+                sb.append(Integer.toHexString((data[i] & 0xff)));
             }
-            sb.append(Integer.toHexString((data[i] & 0xff)));
         }
         return sb.toString();
     }
@@ -374,7 +375,10 @@ public class Utils {
      * @return base-64 encoded data
      */
     public static String base64encodeMultiLine(byte[] bytes) {
-        return new Base64(64).encodeToString(bytes);
+        // When switching from apache-commons-codec to the standard library,
+        // the standard library does not include a final line separator at
+        // the end of the encoded data. This results in malformed CSRs.
+        return Base64.getMimeEncoder().encodeToString(bytes) + "\r\n";
     }
 
 
@@ -386,7 +390,7 @@ public class Utils {
      * @return base-64 encoded data
      */
     public static String base64encodeSingleLine(byte[] bytes) {
-        return new Base64().encodeToString(bytes);
+        return Base64.getEncoder().encodeToString(bytes);
     }
 
     /**
@@ -396,7 +400,20 @@ public class Utils {
      * @return byte array
      */
     public static byte[] base64decode(String string) {
-        return Base64.decodeBase64(string);
+        try {
+            // Java is particular about its base64. We already used the MIME
+            // decoder as it was most flexible about whitespace. However, it
+            // doesn't understand URL-encoded Base64 (using '-' instead of
+            // '+' and '_' instead of '/'). So, detect those characters and
+            // pass it to the correct decoder.
+            if (string.contains("_") || string.contains("-")) {
+                return Base64.getUrlDecoder().decode(string);
+            } else {
+                return Base64.getMimeDecoder().decode(string);
+            }
+        } catch (IllegalArgumentException iae) {
+            return new byte[0];
+        }
     }
 
     /**

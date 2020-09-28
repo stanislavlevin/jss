@@ -171,6 +171,9 @@ finish:
     if(outbuf) {
         PR_Free(outbuf);
     }
+    if (inbuf) {
+        (*env)->ReleaseByteArrayElements(env, inputBA, inbuf, JNI_ABORT);
+    }
     return outArray;
 }
 
@@ -322,7 +325,8 @@ Java_org_mozilla_jss_pkcs11_CipherContextProxy_releaseNativeResources
 {
     PK11Context *context;
 
-    if( JSS_PK11_getCipherContext(env, this, &context) == PR_SUCCESS ) {
+    if (JSS_PK11_getCipherContext(env, this, &context) == PR_SUCCESS &&
+            context != NULL) {
         PK11_DestroyContext(context, PR_TRUE /*freeit*/);
     }
 }

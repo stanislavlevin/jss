@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.jss;
 
+import java.security.Security;
 import java.security.GeneralSecurityException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
@@ -35,6 +36,7 @@ import org.mozilla.jss.pkcs11.PK11Token;
 import org.mozilla.jss.provider.java.security.JSSMessageDigestSpi;
 import org.mozilla.jss.util.Assert;
 import org.mozilla.jss.util.InvalidNicknameException;
+import org.mozilla.jss.util.NativeProxy;
 import org.mozilla.jss.util.PasswordCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,21 +55,21 @@ public final class CryptoManager implements TokenSupplier
 
     static {
 
-        logger.info("CryptoManager: loading JSS library");
+        logger.debug("CryptoManager: loading JSS library");
 
         try {
             System.loadLibrary("jss4");
-            logger.info("CryptoManager: loaded JSS library from java.library.path");
+            logger.debug("CryptoManager: loaded JSS library from java.library.path");
 
         } catch (UnsatisfiedLinkError e) {
 
             try {
                 System.load("/usr/lib64/jss/libjss4.so");
-                logger.info("CryptoManager: loaded JSS library from /usr/lib64/jss/libjss4.so");
+                logger.debug("CryptoManager: loaded JSS library from /usr/lib64/jss/libjss4.so");
 
             } catch (UnsatisfiedLinkError e1) {
                 System.load("/usr/lib/jss/libjss4.so");
-                logger.info("CryptoManager: loaded JSS library from /usr/lib/jss/libjss4.so");
+                logger.debug("CryptoManager: loaded JSS library from /usr/lib/jss/libjss4.so");
             }
         }
     }
@@ -328,6 +330,12 @@ public final class CryptoManager implements TokenSupplier
         reloadModules();
     }
 
+    public static boolean isInitialized() {
+        synchronized (CryptoManager.class) {
+            return instance != null;
+        }
+    }
+
     /**
      * Retrieve the single instance of CryptoManager.
      * This cannot be called before initialization.
@@ -338,13 +346,54 @@ public final class CryptoManager implements TokenSupplier
      *      called.
      * @return CryptoManager instance.
      */
-    public synchronized static CryptoManager getInstance()
+    public static CryptoManager getInstance()
         throws NotInitializedException
     {
-        if(instance==null) {
-            throw new NotInitializedException();
+        synchronized (CryptoManager.class) {
+            if (instance != null) {
+                return instance;
+            }
         }
-        return instance;
+
+        /* Java has lazy-loading Security providers; until a provider
+         * is requested, it won't be loaded. This means we could've
+         * initialized the CryptoManager via the JSSLoader but we won't
+         * know about it until it is explicitly requested.
+         *
+         * This breaks tests looking to configure a file-based password
+         * handler: if the very first call is to getInstance(...) instead
+         * of a Provider call, we'd fail.
+         *
+         * Try to get the Mozilla-JSS provider by name before reporting
+         * that we're not initialized.
+         *
+         * However, in order for the JSSProvider to load, we need to
+         * release our lock on CryptoManager (and in particular, on
+         * CryptoManager.instance).
+         */
+        java.security.Provider p = Security.getProvider("Mozilla-JSS");
+
+        synchronized (CryptoManager.class) {
+            // When instance is properly configured, use that.
+            if (instance != null) {
+                return instance;
+            }
+
+            // Otherwise, work around this by looking at what JSSProvider
+            // created.
+            if (p instanceof JSSProvider) {
+                JSSProvider jssProvider = (JSSProvider) p;
+                assert jssProvider.getCryptoManager() != null;
+
+                if (instance == null) {
+                    instance = jssProvider.getCryptoManager();
+                }
+
+                return instance;
+            }
+        }
+
+        throw new NotInitializedException();
     }
 
     /**
@@ -468,8 +517,6 @@ public final class CryptoManager implements TokenSupplier
             }
         }
 
-        logger.info("CryptoManager: initializing NSS database at " + values.configDir);
-
         initializeAllNative2(values.configDir,
                             values.certPrefix,
                             values.keyPrefix,
@@ -527,7 +574,7 @@ public final class CryptoManager implements TokenSupplier
                 insert_position = java.security.Security.getProviders().length + 1;
             }
 
-            int position = java.security.Security.insertProviderAt(new JSSProvider(), insert_position);
+            int position = java.security.Security.insertProviderAt(new JSSProvider(true), insert_position);
             if (position < 0) {
                 logger.warn("JSS provider is already installed");
             }
@@ -542,6 +589,8 @@ public final class CryptoManager implements TokenSupplier
         if( values.removeSunProvider ) {
             java.security.Security.removeProvider("SUN");
         }
+
+        logger.info("JSS CryptoManager: successfully initialized from NSS database at " + values.configDir);
     }
 
     private static native void
@@ -1371,4 +1420,19 @@ public final class CryptoManager implements TokenSupplier
     private native void setOCSPTimeoutNative(
         int ocsp_timeout )
                     throws GeneralSecurityException;
+
+    /**
+     * Shutdowns this CryptoManager instance and the associated NSS
+     * initialization.
+     */
+    public synchronized void shutdown() throws Exception {
+        try {
+            NativeProxy.purgeAllInRegistry();
+        } finally {
+            shutdownNative();
+            CryptoManager.instance = null;
+        }
+    }
+
+    public native void shutdownNative();
 }

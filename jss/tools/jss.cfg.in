@@ -1,0 +1,3 @@
+nss.config_dir=${NSS_DB_PATH}
+jss.password=${DB_PWD}
+jss.experimental.sslengine=true

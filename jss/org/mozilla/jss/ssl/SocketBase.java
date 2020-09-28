@@ -101,18 +101,23 @@ class SocketBase {
     /* ssl/sslt.h */
     static final int SSL_Variant_Stream = 33;
     static final int SSL_Variant_Datagram = 34;
+    static final int SSL_ENABLE_POST_HANDSHAKE_AUTH = 36;
 
     static final int SSL_AF_INET = 50;
     static final int SSL_AF_INET6 = 51;
 
     void close() throws IOException {
-        socketClose();
-    }
+        try {
+            sockProxy.close();
+        } catch (Exception e) {
+            String msg = "Unexpected exception while trying to finalize ";
+            msg += "SocketProxy: " + e.getMessage();
 
-    // SSLServerSocket and SSLSocket close methods
-    // have their own synchronization control that
-    // protects SocketBase.socketClose.
-    native void socketClose() throws IOException;
+            throw new IOException(msg, e);
+        } finally {
+            sockProxy = null;
+        }
+    }
 
     private boolean requestingClientAuth = false;
 
@@ -169,6 +174,10 @@ class SocketBase {
 
     void enableV2CompatibleHello(boolean enable) throws SocketException {
         setSSLOption(SSL_V2_COMPATIBLE_HELLO, enable);
+    }
+
+    void enablePostHandshakeAuth(boolean enable) throws SocketException {
+        setSSLOption(SSL_ENABLE_POST_HANDSHAKE_AUTH, enable);
     }
 
     void setSSLOption(int option, boolean on)

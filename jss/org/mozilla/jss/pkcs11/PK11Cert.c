@@ -169,7 +169,7 @@ JNIEXPORT void JNICALL
 Java_org_mozilla_jss_pkcs11_CertProxy_releaseNativeResources
   (JNIEnv *env, jobject this)
 {
-	CERTCertificate *cert;
+	CERTCertificate *cert = NULL;
 	PRThread * VARIABLE_MAY_NOT_BE_USED pThread;
 
 	PR_ASSERT(env!=NULL && this!=NULL);
@@ -182,9 +182,10 @@ Java_org_mozilla_jss_pkcs11_CertProxy_releaseNativeResources
 		PR_ASSERT( PR_FALSE );
 		goto finish;
 	}
-	PR_ASSERT(cert != NULL);
 
-	CERT_DestroyCertificate(cert);
+	if (cert != NULL) {
+		CERT_DestroyCertificate(cert);
+	}
 
 finish:
 	PR_DetachThread();

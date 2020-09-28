@@ -12,7 +12,10 @@ import java.security.InvalidKeyException;
 /**
  * Message Digesting with PKCS #11.
  */
-public final class PK11MessageDigest extends JSSMessageDigest {
+public final class PK11MessageDigest
+    extends JSSMessageDigest
+    implements java.lang.AutoCloseable
+{
 
     private PK11Token token;
     private CipherContextProxy digestProxy;
@@ -40,20 +43,11 @@ public final class PK11MessageDigest extends JSSMessageDigest {
             throw new DigestException("Digest is not an HMAC or CMAC digest");
         }
 
-        reset();
-
         if( ! (key instanceof PK11SymKey) ) {
             throw new InvalidKeyException("HMAC key is not a PKCS #11 key");
         }
 
         hmacKey = (PK11SymKey) key;
-
-        if( ! key.getOwningToken().equals(token) ) {
-            hmacKey = null;
-            throw new InvalidKeyException(
-                "HMAC key does not live on the same token as this digest");
-        }
-
         this.digestProxy = initHMAC(token, alg, hmacKey);
     }
 
@@ -122,4 +116,19 @@ public final class PK11MessageDigest extends JSSMessageDigest {
     private static native int
     digest(CipherContextProxy proxy, byte[] outbuf, int offset, int len);
 
+    @Override
+    public void finalize() throws Throwable {
+        close();
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (digestProxy != null) {
+            try {
+                digestProxy.close();
+            } finally {
+                digestProxy = null;
+            }
+        }
+    }
 }

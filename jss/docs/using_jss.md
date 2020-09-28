@@ -18,8 +18,6 @@ following dependencies are available in your `CLASSPATH`:
    `/usr/share/java/slf4j/slf4j-api.jar`.
  - `apache-commons-lang.jar` -- provided by the `apache-commons-lang` package
    and installed to `/usr/share/java/apache-commons-lang.jar`.
- - `apache-commons-codec.jar` -- provided by the `apache-commons-codec`
-   package and installed to `/usr/share/java/apache-commons-codec.jar`.
  - `jaxb-api.jar` -- provided by the `glassfish-jaxb-api` package
    and installed to `/usr/share/java/jaxb-api.jar`.
 
@@ -33,3 +31,8 @@ We recommend referring to the javadoc distribution generated when JSS was
 installed. On Fedora-like systems, this is provided by the `jss-javadoc`
 package; for an online version tracking master, please refer to our
 [live instance](https://dogtagpki.github.io/jss/javadoc/index.html).
+
+## More Information
+
+For more information about using JSS, please see our documentation on loading
+the [`JSSProvider`](usage/jssprovider.md).

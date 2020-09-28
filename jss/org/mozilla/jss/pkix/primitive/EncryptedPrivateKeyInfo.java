@@ -147,7 +147,7 @@ public class EncryptedPrivateKeyInfo implements ASN1Value {
         // generate IV
         EncryptionAlgorithm encAlg = pbeAlg.getEncryptionAlg();
         AlgorithmParameterSpec params=null;
-        Class<?> [] paramClasses = pbeAlg.getParameterClasses();
+        Class<?> [] paramClasses = encAlg.getParameterClasses();
         for (int i = 0; i < paramClasses.length; i ++) {
             if ( paramClasses[i].equals( javax.crypto.spec.IvParameterSpec.class ) ) {
                 params = new IVParameterSpec( kg.generatePBE_IV() );
@@ -328,7 +328,7 @@ public class EncryptedPrivateKeyInfo implements ASN1Value {
         // generate IV
         EncryptionAlgorithm encAlg = pbeAlg.getEncryptionAlg();
         AlgorithmParameterSpec params=null;
-        Class<?> [] paramClasses = pbeAlg.getParameterClasses();
+        Class<?> [] paramClasses = encAlg.getParameterClasses();
         for (int i = 0; i < paramClasses.length; i ++) {
             if ( paramClasses[i].equals(
                       javax.crypto.spec.IvParameterSpec.class ) ) {
@@ -337,8 +337,8 @@ public class EncryptedPrivateKeyInfo implements ASN1Value {
             }
         }
 
-        KeyWrapper wrapper = token.getKeyWrapper(
-                KeyWrapAlgorithm.DES3_CBC_PAD);
+        // wrap the key
+        KeyWrapper wrapper = token.getKeyWrapper(KeyWrapAlgorithm.fromOID(encAlg.toOID()));
         wrapper.initWrap(key, params);
         byte encrypted[] = wrapper.wrap(pri);
 

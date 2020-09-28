@@ -200,7 +200,7 @@ static jobject globalPasswordCallback = NULL;
  * The Java virtual machine can be used to retrieve the JNI environment
  * pointer from callback functions.
  */
-JavaVM * JSS_javaVM;
+JavaVM * JSS_javaVM = NULL;
 
 JNIEXPORT void JNICALL
 Java_org_mozilla_jss_CryptoManager_initializeAllNative
@@ -455,7 +455,7 @@ Java_org_mozilla_jss_CryptoManager_initializeAllNative2
     }
 
     if( rv != SECSuccess ) {
-        JSS_throwMsg(env, SECURITY_EXCEPTION,
+        JSS_throwMsgPrErr(env, SECURITY_EXCEPTION,
             "Unable to initialize security library");
         goto finish;
     }
@@ -520,7 +520,7 @@ finish:
 void
 JSS_setPasswordCallback(JNIEnv *env, jobject callback)
 {
-    PR_ASSERT(env!=NULL && callback!=NULL);
+    PR_ASSERT(env != NULL);
 
     /* Free the previously-registered password callback */
     if( globalPasswordCallback != NULL ) {
@@ -528,10 +528,12 @@ JSS_setPasswordCallback(JNIEnv *env, jobject callback)
         globalPasswordCallback = NULL;
     }
 
-    /* Store the new password callback */
-    globalPasswordCallback = (*env)->NewGlobalRef(env, callback);
-    if(globalPasswordCallback == NULL) {
-        JSS_throw(env, OUT_OF_MEMORY_ERROR);
+    if (callback != NULL) {
+        /* Store the new password callback */
+        globalPasswordCallback = (*env)->NewGlobalRef(env, callback);
+        if (globalPasswordCallback == NULL) {
+            JSS_throw(env, OUT_OF_MEMORY_ERROR);
+        }
     }
 }
 
@@ -1035,3 +1037,10 @@ Java_org_mozilla_jss_CryptoManager_getJSSDebug(JNIEnv *env, jobject this)
 #endif
 }
 
+JNIEXPORT void JNICALL
+Java_org_mozilla_jss_CryptoManager_shutdownNative(JNIEnv *env, jobject this)
+{
+    if (NSS_IsInitialized()) {
+        NSS_Shutdown();
+    }
+}

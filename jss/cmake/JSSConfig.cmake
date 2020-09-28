@@ -2,7 +2,7 @@ macro(jss_config)
     # Set the current JSS release number. Arguments are:
     #   MAJOR MINOR PATCH BETA
     # When BETA is zero, it isn't a beta release.
-    jss_config_version(4 6 2 0)
+    jss_config_version(4 7 3 0)
 
     # Configure output directories
     jss_config_outputs()
@@ -14,11 +14,14 @@ macro(jss_config)
     # Configure java-related flags
     jss_config_java()
 
-    # Template auto-generated files
-    jss_config_template()
+    # Configure test variables
+    jss_config_tests()
 
     # Check symbols to see what tests we run
     jss_config_symbols()
+
+    # Template auto-generated files
+    jss_config_template()
 endmacro()
 
 macro(jss_config_version MAJOR MINOR PATCH BETA)
@@ -57,6 +60,7 @@ macro(jss_config_outputs)
     # Global variables representing various output files; note that these
     # directories are created at the end of this macro.
     set(CLASSES_OUTPUT_DIR "${CMAKE_BINARY_DIR}/classes/jss")
+    set(CONFIG_OUTPUT_DIR "${CMAKE_BINARY_DIR}/config")
     set(DOCS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/docs")
     set(LIB_OUTPUT_DIR "${CMAKE_BINARY_DIR}/lib")
     set(BIN_OUTPUT_DIR "${CMAKE_BINARY_DIR}/bin")
@@ -65,11 +69,14 @@ macro(jss_config_outputs)
 
     # This folder is for pseudo-locations for CMake targets
     set(TARGETS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/.targets")
+    set(JAVA_SOURCES_FILE "${TARGETS_OUTPUT_DIR}/java.sources")
+    set(JAVA_TEST_SOURCES_FILE "${TARGETS_OUTPUT_DIR}/java-test.sources")
 
     # These folders are for the NSS DBs created during testing
     set(RESULTS_DATA_OUTPUT_DIR "${CMAKE_BINARY_DIR}/results/data")
     set(RESULTS_NSSDB_OUTPUT_DIR "${CMAKE_BINARY_DIR}/results/nssdb")
     set(RESULTS_NSSDB_FIPS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/results/fips")
+    set(RESULTS_NSSDB_INTERNET_OUTPUT_DIR "${CMAKE_BINARY_DIR}/results/internet")
 
     # This is a temporary location for building the reproducible jar
     set(REPRODUCIBLE_TEMP_DIR "${CMAKE_BINARY_DIR}/reproducible")
@@ -95,6 +102,7 @@ macro(jss_config_outputs)
 
     # Create the *_OUTPUT_DIR locations.
     file(MAKE_DIRECTORY "${CLASSES_OUTPUT_DIR}")
+    file(MAKE_DIRECTORY "${CONFIG_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${DOCS_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${LIB_OUTPUT_DIR}")
     file(MAKE_DIRECTORY "${BIN_OUTPUT_DIR}")
@@ -202,10 +210,6 @@ macro(jss_config_java)
         NAMES api slf4j/api slf4j-api
     )
     find_jar(
-        CODEC_JAR
-        NAMES apache-commons-codec commons-codec
-    )
-    find_jar(
         LANG_JAR
         NAMES apache-commons-lang commons-lang
     )
@@ -231,10 +235,6 @@ macro(jss_config_java)
         message(FATAL_ERROR "Required dependency sfl4j-api.jar not found by find_jar!")
     endif()
 
-    if(CODEC_JAR STREQUAL "CODEC_JAR-NOTFOUND")
-        message(FATAL_ERROR "Required dependency apache-commons-codec.jar not found by find_jar!")
-    endif()
-
     if(LANG_JAR STREQUAL "LANG_JAR-NOTFOUND")
         message(FATAL_ERROR "Required dependency apache-commons-lang.jar not found by find_jar!")
     endif()
@@ -256,7 +256,7 @@ macro(jss_config_java)
     endif()
 
     # Set class paths
-    set(JAVAC_CLASSPATH "${SLF4J_API_JAR}:${CODEC_JAR}:${LANG_JAR}:${JAXB_JAR}")
+    set(JAVAC_CLASSPATH "${SLF4J_API_JAR}:${LANG_JAR}:${JAXB_JAR}")
     set(TEST_CLASSPATH "${JSS_JAR_PATH}:${JSS_TESTS_JAR_PATH}:${JAVAC_CLASSPATH}:${SLF4J_JDK14_JAR}:${JUNIT4_JAR}:${HAMCREST_JAR}")
 
     message(STATUS "javac classpath: ${JAVAC_CLASSPATH}")
@@ -282,6 +282,7 @@ macro(jss_config_java)
 
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
         list(APPEND JSS_JAVAC_FLAGS "-g")
+        list(APPEND JSS_JAVAC_FLAGS "-Xlint:unchecked")
     else()
         list(APPEND JSS_JAVAC_FLAGS "-O")
     endif()
@@ -313,18 +314,23 @@ macro(jss_config_java)
     message(STATUS "JSS JAVAC FLAGS: ${JSS_JAVAC_FLAGS}")
     message(STATUS "JSS TEST JAVAC FLAGS: ${JSS_TEST_JAVAC_FLAGS}")
 
-    # Variables for javadoc building. Note that JSS_PACKAGES needs to be
-    # updated whenever a new package is created.
+    # Variables for javadoc building.
     set(JSS_WINDOW_TITLE "JSS: Java Security Services")
-    set(JSS_PACKAGES "org.mozilla.jss;org.mozilla.jss.asn1;org.mozilla.jss.crypto;org.mozilla.jss.pkcs7;org.mozilla.jss.pkcs10;org.mozilla.jss.pkcs11;org.mozilla.jss.pkcs12;org.mozilla.jss.pkix.primitive;org.mozilla.jss.pkix.cert;org.mozilla.jss.pkix.cmc;org.mozilla.jss.pkix.cmmf;org.mozilla.jss.pkix.cms;org.mozilla.jss.pkix.crmf;org.mozilla.jss.provider.java.security;org.mozilla.jss.provider.javax.crypto;org.mozilla.jss.SecretDecoderRing;org.mozilla.jss.ssl;org.mozilla.jss.util;org.mozilla.jss.netscape.security.util;org.mozilla.jss.netscape.security.extensions;org.mozilla.jss.netscape.security.acl;org.mozilla.jss.netscape.security.pkcs;org.mozilla.jss.netscape.security.x509;org.mozilla.jss.netscape.security.provider;org.mozilla.jss.nss;org.mozilla.jss.ssl.javax")
 
     set(JSS_BASE_PORT 2876)
     math(EXPR JSS_TEST_PORT_CLIENTAUTH ${JSS_BASE_PORT}+0)
     math(EXPR JSS_TEST_PORT_CLIENTAUTH_FIPS ${JSS_BASE_PORT}+1)
+
+    # Create META-INF directory for provider
+    file(MAKE_DIRECTORY "${CLASSES_OUTPUT_DIR}/META-INF/services")
 endmacro()
 
 macro(jss_config_template)
     # Template files
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/org/mozilla/jss/jssconfig.h.in"
+        "${PROJECT_SOURCE_DIR}/org/mozilla/jss/jssconfig.h"
+    )
     configure_file(
         "${PROJECT_SOURCE_DIR}/org/mozilla/jss/util/jssver.h.in"
         "${PROJECT_SOURCE_DIR}/org/mozilla/jss/util/jssver.h"
@@ -334,9 +340,48 @@ macro(jss_config_template)
         "${CMAKE_BINARY_DIR}/MANIFEST.MF"
     )
     configure_file(
+        "${PROJECT_SOURCE_DIR}/lib/java.security.Provider.in"
+        "${CLASSES_OUTPUT_DIR}/META-INF/services/java.security.Provider"
+    )
+    configure_file(
         "${PROJECT_SOURCE_DIR}/tools/run_test.sh.in"
         "${CMAKE_BINARY_DIR}/run_test.sh"
     )
+    set(JSS_CFG_PATH "${CONFIG_OUTPUT_DIR}/jss.cfg")
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/tools/java.security.in"
+        "${CONFIG_OUTPUT_DIR}/java.security"
+        @ONLY
+    )
+    set(NSS_DB_PATH "${RESULTS_NSSDB_OUTPUT_DIR}")
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/tools/jss.cfg.in"
+        "${JSS_CFG_PATH}"
+    )
+    set(JSS_CFG_PATH "${CONFIG_OUTPUT_DIR}/jss-fips.cfg")
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/tools/java.security.in"
+        "${CONFIG_OUTPUT_DIR}/fips.security"
+        @ONLY
+    )
+    set(NSS_DB_PATH "${RESULTS_NSSDB_FIPS_OUTPUT_DIR}")
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/tools/jss.cfg.in"
+        "${JSS_CFG_PATH}"
+    )
+    set(JSS_CFG_PATH "${CONFIG_OUTPUT_DIR}/jss-internet.cfg")
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/tools/java.security.in"
+        "${CONFIG_OUTPUT_DIR}/internet.security"
+        @ONLY
+    )
+    set(NSS_DB_PATH "${RESULTS_NSSDB_INTERNET_OUTPUT_DIR}")
+    configure_file(
+        "${PROJECT_SOURCE_DIR}/tools/jss.cfg.in"
+        "${JSS_CFG_PATH}"
+    )
+    unset(JSS_CFG_PATH)
+    unset(NSS_DB_PATH)
 endmacro()
 
 macro(jss_config_symbols)
@@ -348,4 +393,74 @@ macro(jss_config_symbols)
     if(NOT HAVE_NSS_CMAC)
         message(WARNING "Your NSS version doesn't support CMAC; some features of JSS won't work.")
     endif()
+
+    check_symbol_exists("CKM_SP800_108_COUNTER_KDF" "nspr.h;nss.h;pkcs11t.h" HAVE_NSS_KBKDF)
+    if(NOT HAVE_NSS_KBKDF)
+        message(WARNING "Your NSS version doesn't support NIST SP800-108 KBKDF; some features of JSS won't work.")
+    endif()
+
+    if(HAVE_NSS_CMAC)
+        try_run(CK_HAVE_WORKING_NSS
+                CK_HAVE_COMPILING_NSS
+                ${CMAKE_BINARY_DIR}/results
+                ${CMAKE_SOURCE_DIR}/tools/tests/cmac.c
+                CMAKE_FLAGS
+                        "-DINCLUDE_DIRECTORIES=${CMAKE_REQUIRED_INCLUDES}"
+                        "-DREQUIRED_FLAGS=${CMAKE_REQUIRED_FLAGS}"
+                COMPILE_OUTPUT_VARIABLE COMP_OUT
+                RUN_OUTPUT_VARIABLE RUN_OUT)
+
+        if (NOT CK_HAVE_WORKING_NSS STREQUAL "0" OR NOT CK_HAVE_COMPILING_NSS)
+            set(HAVE_NSS_CMAC FALSE)
+            set(HAVE_NSS_KBKDF FALSE)
+            message(WARNING "Your NSS version is broken: between NSS v3.47 and v3.50, the values of CKM_AES_CMAC and CKM_AES_CMAC_GENERAL were swapped. Disabling CMAC and KBKDF support.")
+        endif()
+    endif()
+
+    # Added in NSS v3.43
+    check_struct_has_member(
+        SSLCipherSuiteInfo
+        kdfHash
+        ssl.h
+        HAVE_NSS_CIPHER_SUITE_INFO_KDFHASH
+    )
+
+    # Added in NSS v3.34
+    check_struct_has_member(
+        SSLChannelInfo
+        originalKeaGroup
+        ssl.h
+        HAVE_NSS_CHANNEL_INFO_ORIGINAL_KEA_GROUP
+    )
+
+    # Added in NSS v3.45
+    check_struct_has_member(
+        SSLChannelInfo
+        peerDelegCred
+        ssl.h
+        HAVE_NSS_CHANNEL_INFO_PEER_DELEG_CRED
+    )
+
+    # Added in NSS v3.43
+    check_struct_has_member(
+        SSLPreliminaryChannelInfo
+        zeroRttCipherSuite
+        ssl.h
+        HAVE_NSS_PRELIMINARY_CHANNEL_INFO_ZERO_RTT_CIPHER_SUITE
+    )
+
+    # Added in NSS v3.48
+    check_struct_has_member(
+        SSLPreliminaryChannelInfo
+        peerDelegCred
+        ssl.h
+        HAVE_NSS_PRELIMINARY_CHANNEL_INFO_PEER_DELEG_CRED
+    )
+endmacro()
+
+macro(jss_config_tests)
+    # Common variables used as arguments to several tests
+    set(JSS_TEST_DIR "${PROJECT_SOURCE_DIR}/org/mozilla/jss/tests")
+    set(PASSWORD_FILE "${JSS_TEST_DIR}/passwords")
+    set(DB_PWD "m1oZilla")
 endmacro()

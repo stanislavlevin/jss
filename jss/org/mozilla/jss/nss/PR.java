@@ -66,11 +66,41 @@ public class PR {
                                                  BufferProxy write_buf,
                                                  byte[] peer_info);
     /**
-     * Close an existing PRFDProxy.
+     * Close an existing PRFDProxy, clearing the pointer if successful.
      *
      * See also: PR_Close in /usr/include/nspr4/prio.h
      */
-    public static native int Close(PRFDProxy fd);
+    public static int Close(PRFDProxy fd) {
+        if (fd == null || fd.isNull()) {
+            return SUCCESS;
+        }
+
+        return Close(fd, true);
+    }
+
+    /**
+     * Close an existing PRFDProxy with an option to clear the pointer.
+     *
+     * See also: PR_Close in /usr/include/nspr4/prio.h
+     */
+    public static native int Close(PRFDProxy fd, boolean clear);
+
+    /**
+     * Close an existing SSLFDProxy.
+     *
+     * See also: org.mozilla.jss.nss.PR.Close
+     *           org.mozilla.jss.nss.SSLFDProxy.releaseNativeResources
+     */
+    public synchronized static int Close(SSLFDProxy fd) throws Exception {
+        if (fd == null || fd.isNull()) {
+            return SUCCESS;
+        }
+
+        // Because a SSLFDProxy instance needs to free other native resources,
+        // we can't release the pointer here. Instead, let NativeProxy.close()
+        // handle clearing the PRFileDesc pointer.
+        return Close((PRFDProxy) fd, false);
+    }
 
     /**
      * Shutdown an existing PRFDProxy.

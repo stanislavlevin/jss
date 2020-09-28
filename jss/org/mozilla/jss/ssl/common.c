@@ -333,21 +333,28 @@ JNIEXPORT void JNICALL
 Java_org_mozilla_jss_ssl_SocketProxy_releaseNativeResources
     (JNIEnv *env, jobject this)
 {
-    /* SSLSocket.close and SSLServerSocket.close call	  */
-    /* SocketBase.close to destroy all native Resources */
-    /* attached to the socket. There is no native resource */
-    /* to release after close has been called. This method  */
-    /* remains because SocketProxy extends org.mozilla.jss.util.NativeProxy*/
-    /* which defines releaseNativeResources as abstract and */
-    /* therefore must be implemented by SocketProxy */
+    JSSL_SocketData *sockdata;
+
+    PR_ASSERT(env != NULL && this != NULL);
+
+    if (JSS_getPtrFromProxy(env, this, (void**)&sockdata) != PR_SUCCESS) {
+        return;
+    }
+
+    JSSL_DestroySocketData(env, sockdata);
 }
 
 void
 JSSL_DestroySocketData(JNIEnv *env, JSSL_SocketData *sd)
 {
-    PR_ASSERT(sd != NULL);
+    if (sd == NULL) {
+        return;
+    }
 
-    PR_Close(sd->fd);
+    if (sd->fd != NULL) {
+        PR_Close(sd->fd);
+        sd->fd = NULL;
+    }
 
     if( sd->socketObject != NULL ) {
         DELETE_WEAK_GLOBAL_REF(env, sd->socketObject );
@@ -367,6 +374,8 @@ JSSL_DestroySocketData(JNIEnv *env, JSSL_SocketData *sd)
     if( sd->lock != NULL ) {
         PR_DestroyLock(sd->lock);
     }
+
+    memset(sd, 0, sizeof(JSSL_SocketData));
     PR_Free(sd);
 }
 
@@ -413,6 +422,7 @@ PRInt32 JSSL_enums[] = {
     ssl_variant_stream,           /* 33 */      /* sslt.h */
     ssl_variant_datagram,         /* 34 */      /* sslt.h */
     SSL_LIBRARY_VERSION_TLS_1_3,  /* 35 */      /* sslproto.h */
+    SSL_ENABLE_POST_HANDSHAKE_AUTH, /* 36 */      /* ssl.h */
     0
 };
 
@@ -445,7 +455,7 @@ Java_org_mozilla_jss_ssl_SocketBase_socketBind
     jclass socketBaseClass;
     jboolean supportsIPV6 = 0;
 
-    if( JSSL_getSockData(env, self, &sock) != PR_SUCCESS) {
+    if (JSSL_getSockData(env, self, &sock) != PR_SUCCESS || sock == NULL) {
         /* exception was thrown */
         goto finish;
     }
@@ -530,24 +540,6 @@ finish:
     JSS_DerefByteArray(env, addrBA, addrBAelems, JNI_ABORT);
 }
 
-/*
- * SSLServerSocket and SSLSocket have their own synchronization 
- * that protects SocketBase.socketClose.
- */
-JNIEXPORT void JNICALL
-Java_org_mozilla_jss_ssl_SocketBase_socketClose(JNIEnv *env, jobject self)
-{
-    JSSL_SocketData *sock = NULL;
-
-    /* get the FD */
-    if( JSSL_getSockData(env, self, &sock) != PR_SUCCESS) {
-        /* exception was thrown */
-        return;
-    }
-
-    JSSL_DestroySocketData(env, sock);
-}
-
 JNIEXPORT void JNICALL
 Java_org_mozilla_jss_ssl_SocketBase_requestClientAuthNoExpiryCheckNative
     (JNIEnv *env, jobject self, jboolean b)
@@ -555,7 +547,7 @@ Java_org_mozilla_jss_ssl_SocketBase_requestClientAuthNoExpiryCheckNative
     JSSL_SocketData *sock = NULL;
     SECStatus status;
 
-    if( JSSL_getSockData(env, self, &sock) != PR_SUCCESS) goto finish;
+    if (JSSL_getSockData(env, self, &sock) != PR_SUCCESS || sock == NULL) goto finish;
 
     /*
      * Set the option on the socket
@@ -593,7 +585,7 @@ Java_org_mozilla_jss_ssl_SocketBase_setSSLOption
     JSSL_SocketData *sock = NULL;
 
     /* get my fd */
-    if( JSSL_getSockData(env, self, &sock) != PR_SUCCESS ) {
+    if (JSSL_getSockData(env, self, &sock) != PR_SUCCESS || sock == NULL) {
         goto finish;
     }
 
@@ -617,7 +609,7 @@ Java_org_mozilla_jss_ssl_SocketBase_setSSLOptionMode
     JSSL_SocketData *sock = NULL;
 
     /* get my fd */
-    if( JSSL_getSockData(env, self, &sock) != PR_SUCCESS ) {
+    if (JSSL_getSockData(env, self, &sock) != PR_SUCCESS || sock == NULL) {
         goto finish;
     }
 
@@ -642,7 +634,7 @@ Java_org_mozilla_jss_ssl_SocketBase_getSSLOption(JNIEnv *env,
     SECStatus status = SECSuccess;
     PRBool bOption = PR_FALSE;
 
-    if( JSSL_getSockData(env, self, &sock) != PR_SUCCESS ) {
+    if (JSSL_getSockData(env, self, &sock) != PR_SUCCESS || sock == NULL) {
         goto finish;
     }
 
@@ -667,7 +659,7 @@ JSSL_getSockAddr
     PRStatus status=PR_FAILURE;
 
     /* get my fd */
-    if( JSSL_getSockData(env, self, &sock) != PR_SUCCESS ) {
+    if (JSSL_getSockData(env, self, &sock) != PR_SUCCESS || sock == NULL) {
         goto finish;
     }
 
@@ -816,7 +808,7 @@ Java_org_mozilla_jss_ssl_SocketBase_setClientCert(
         goto finish;
     }
 
-    if( JSSL_getSockData(env, self, &sock) != PR_SUCCESS) goto finish;
+    if (JSSL_getSockData(env, self, &sock) != PR_SUCCESS || sock == NULL) goto finish;
 
     /*
      * Store the cert and slot in the SocketData.

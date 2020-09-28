@@ -226,7 +226,7 @@ JNIEXPORT void JNICALL
 Java_org_mozilla_jss_pkcs11_PrivateKeyProxy_releaseNativeResources
   (JNIEnv *env, jobject this)
 {
-    SECKEYPrivateKey *privk;
+    SECKEYPrivateKey *privk = NULL;
     PRThread * VARIABLE_MAY_NOT_BE_USED pThread;
 
     PR_ASSERT(env!=NULL && this!=NULL);
@@ -239,9 +239,10 @@ Java_org_mozilla_jss_pkcs11_PrivateKeyProxy_releaseNativeResources
         PR_ASSERT( PR_FALSE );
         goto finish;
     }
-    PR_ASSERT(privk != NULL);
 
-    SECKEY_DestroyPrivateKey(privk);
+    if (privk != NULL) {
+        SECKEY_DestroyPrivateKey(privk);
+    }
 
 finish:
     PR_DetachThread();
@@ -351,15 +352,12 @@ Java_org_mozilla_jss_pkcs11_PK11PrivKey_getUniqueID
     /***************************************************
      * Write the key id to a new byte array
      ***************************************************/
-    PR_ASSERT(idItem->len > 0);
-    byteArray = JSS_ToByteArray(env, idItem->data, idItem->len);
-    if (byteArray == NULL) {
-        ASSERT_OUTOFMEM(env);
-        goto finish;
+    if (idItem->len > 0) {
+        byteArray = JSS_ToByteArray(env, idItem->data, idItem->len);
     }
 
 finish:
-    if(idItem != NULL) {
+    if (idItem != NULL) {
         SECITEM_FreeItem(idItem, PR_TRUE /*freeit*/);
     }
     
@@ -734,11 +732,15 @@ Java_org_mozilla_jss_pkcs11_PK11PrivKey_getPublicKey
     SECKEYPublicKey *pubKey;
 
     if (JSS_PK11_getPrivKeyPtr(env, this, &privKey) != PR_SUCCESS) {
+        JSS_throwMsg(env, NULL_POINTER_EXCEPTION, "Unable to get private "
+                     "key pointer from local instance");
         return NULL;
     }
 
     pubKey = SECKEY_ConvertToPublicKey(privKey);
     if (pubKey == NULL) {
+        JSS_throwMsgPrErr(env, NULL_POINTER_EXCEPTION, "Expected non-NULL "
+                          "private key to convert to non-NULL public key");
         return NULL;
     }
 

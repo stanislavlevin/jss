@@ -9,6 +9,7 @@ import java.io.UnsupportedEncodingException;
 import org.mozilla.jss.crypto.SecretKeyFacade;
 import org.mozilla.jss.crypto.AlreadyInitializedException;
 import org.mozilla.jss.crypto.CryptoToken;
+import org.mozilla.jss.crypto.Policy;
 import org.mozilla.jss.crypto.TokenException;
 import javax.crypto.SecretKey;
 import javax.crypto.BadPaddingException;
@@ -86,11 +87,11 @@ public class JCAKeyWrap {
             // Generate an RSA keypair
             KeyPairGenerator kpgen;
             kpgen = KeyPairGenerator.getInstance("RSA", MOZ_PROVIDER_NAME);
-            kpgen.initialize(1024);
+            kpgen.initialize(Policy.RSA_MINIMUM_KEY_SIZE);
             KeyPair rsaKeyPairNSS = kpgen.generateKeyPair();
 
             kpgen = KeyPairGenerator.getInstance("RSA", otherRSAProvider);
-            kpgen.initialize(1024);
+            kpgen.initialize(Policy.RSA_MINIMUM_KEY_SIZE);
             KeyPair rsaKeyPairOtherProvider = kpgen.generateKeyPair();
 
             javax.crypto.SecretKey tripleDESKey;
@@ -174,7 +175,6 @@ public class JCAKeyWrap {
      */
     public JCAKeyWrap(String certDbLoc, String passwdFile) {
         try {
-            CryptoManager.initialize(certDbLoc);
             CryptoManager cm = CryptoManager.getInstance();
             CryptoToken token = cm.getInternalKeyStorageToken();
             PasswordCallback cb = new FilePasswordCallback(passwdFile);
@@ -184,18 +184,6 @@ public class JCAKeyWrap {
                 System.out.println("in Fipsmode.");
             }
         } catch (IOException ex) {
-            ex.printStackTrace();
-            System.exit(1);
-        } catch (KeyDatabaseException ex) {
-            ex.printStackTrace();
-            System.exit(1);
-        } catch (CertDatabaseException ex) {
-            ex.printStackTrace();
-            System.exit(1);
-        } catch (AlreadyInitializedException ex) {
-            ex.printStackTrace();
-            System.exit(1);
-        } catch (GeneralSecurityException ex) {
             ex.printStackTrace();
             System.exit(1);
         } catch (IncorrectPasswordException ex) {

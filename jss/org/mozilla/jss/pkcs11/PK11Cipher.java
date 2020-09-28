@@ -19,7 +19,10 @@ import org.mozilla.jss.crypto.IllegalBlockSizeException;
 import org.mozilla.jss.crypto.SymmetricKey;
 import org.mozilla.jss.crypto.TokenException;
 
-final class PK11Cipher extends org.mozilla.jss.crypto.Cipher {
+public final class PK11Cipher
+    extends org.mozilla.jss.crypto.Cipher
+    implements java.lang.AutoCloseable
+{
 
     // set once in the constructor
     private PK11Token token;
@@ -262,10 +265,6 @@ final class PK11Cipher extends org.mozilla.jss.crypto.Cipher {
         if( key==null ) {
             throw new InvalidKeyException("Key is null");
         }
-        if( ! key.getOwningToken().equals(token) ) {
-            throw new InvalidKeyException("Key does not reside on the "+
-                "current token");
-        }
         if( ! (key instanceof PK11SymKey) ) {
             throw new InvalidKeyException("Key is not a PKCS #11 key");
         }
@@ -277,11 +276,26 @@ final class PK11Cipher extends org.mozilla.jss.crypto.Cipher {
                 && keyType != KeyType.getKeyTypeFromAlgorithm(algorithm)
             ) {
                 throw new InvalidKeyException("Key is not the right type for"+
-                    " this algorithm: " + ((PK11SymKey)key).getKeyType() + ":" + KeyType.getKeyTypeFromAlgorithm(algorithm) +";");
+                    " this algorithm. Got: " + ((PK11SymKey)key).getKeyType() + " Expected: " + KeyType.getKeyTypeFromAlgorithm(algorithm));
             }
         } catch( NoSuchAlgorithmException e ) {
             throw new RuntimeException("Unknown algorithm: " + algorithm, e);
         }
     }
 
+    @Override
+    public void finalize() throws Throwable {
+        close();
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (contextProxy != null) {
+            try {
+                contextProxy.close();
+            } finally {
+                contextProxy = null;
+            }
+        }
+    }
 }
