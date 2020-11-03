@@ -2,7 +2,7 @@ macro(jss_config)
     # Set the current JSS release number. Arguments are:
     #   MAJOR MINOR PATCH BETA
     # When BETA is zero, it isn't a beta release.
-    jss_config_version(4 7 3 0)
+    jss_config_version(4 8 0 0)
 
     # Configure output directories
     jss_config_outputs()
@@ -211,7 +211,7 @@ macro(jss_config_java)
     )
     find_jar(
         LANG_JAR
-        NAMES apache-commons-lang commons-lang
+        NAMES apache-commons-lang3 commons-lang3
     )
     find_jar(
         JAXB_JAR

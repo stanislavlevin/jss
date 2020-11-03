@@ -68,8 +68,14 @@ public final class CryptoManager implements TokenSupplier
                 logger.debug("CryptoManager: loaded JSS library from /usr/lib64/jss/libjss4.so");
 
             } catch (UnsatisfiedLinkError e1) {
-                System.load("/usr/lib/jss/libjss4.so");
-                logger.debug("CryptoManager: loaded JSS library from /usr/lib/jss/libjss4.so");
+                try {
+                    System.load("/usr/lib/jss/libjss4.so");
+                    logger.debug("CryptoManager: loaded JSS library from /usr/lib/jss/libjss4.so");
+                } catch (UnsatisfiedLinkError e2) {
+                    logger.warn("Unable to load jss4 via loadLibrary: " + e.toString());
+                    logger.warn("Unable to load /usr/lib64/jss/libjss4.so: " + e1.toString());
+                    throw e2;
+                }
             }
         }
     }
@@ -370,6 +376,9 @@ public final class CryptoManager implements TokenSupplier
          * However, in order for the JSSProvider to load, we need to
          * release our lock on CryptoManager (and in particular, on
          * CryptoManager.instance).
+         *
+         * For a more complete discussion see docs/usage/cryptomanager.md
+         * in the source distribution.
          */
         java.security.Provider p = Security.getProvider("Mozilla-JSS");
 
@@ -380,7 +389,9 @@ public final class CryptoManager implements TokenSupplier
             }
 
             // Otherwise, work around this by looking at what JSSProvider
-            // created.
+            // created. Note that this will work when CryptoManager no
+            // longer is a singleton and becomes tied to a specific
+            // JSSProvider instance.
             if (p instanceof JSSProvider) {
                 JSSProvider jssProvider = (JSSProvider) p;
                 assert jssProvider.getCryptoManager() != null;

@@ -9,7 +9,7 @@ JSS supports most of the security standards and encryption technologies supporte
 JSS also provides a pure Java interface for ASN.1 types and BER/DER encoding.
 
 * Website: http://www.dogtagpki.org/wiki/JSS
-* Issues: https://pagure.io/jss/issues
+* Issues: https://github.com/dogtagpki/jss/issues
 * Archive: https://github.com/dogtagpki/jss-archive
 * Javadocs: https://dogtagpki.github.io/jss
 
@@ -23,7 +23,8 @@ This project has the following dependencies:
 
  - [NSPR](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSPR)
  - [NSS](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS)
-    - Minimum version: 3.30
+    - Minimum version: 3.44
+    - Recommended version: 3.48 and above
     - A c and c++ compiler such as [gcc](ttps://gcc.gnu.org/)
     - [zlib](https://zlib.net/)
  - [OpenJDK 1.8.0 or newer](https://openjdk.java.net/)
