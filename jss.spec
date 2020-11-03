@@ -6,7 +6,7 @@
 %define nss_version 3.44
 
 Name: jss
-Version: 4.7.3
+Version: 4.8.0
 Release: alt1
 
 Summary: Java Security Services (JSS)
@@ -124,6 +124,9 @@ cp -p *.txt %buildroot%_javadocdir/%name-%version
 %_javadocdir/%name-%version
 
 %changelog
+* Tue Nov 03 2020 Stanislav Levin <slev@altlinux.org> 4.8.0-alt1
+- 4.7.3 -> 4.8.0.
+
 * Mon Sep 28 2020 Stanislav Levin <slev@altlinux.org> 4.7.3-alt1
 - 4.6.2 -> 4.7.3.
 
