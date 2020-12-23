@@ -94,7 +94,7 @@ set(CTEST_CUSTOM_TESTS_IGNORE
    Enable_FipsMODE
 )
 EOF
-%cmake_build test
+%cmake_build ARGS=--output-on-failure test
 
 %install
 install -d -m 0755 %buildroot%_jnidir
