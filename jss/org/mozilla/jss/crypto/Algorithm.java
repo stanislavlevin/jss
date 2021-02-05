@@ -257,5 +257,11 @@ public class Algorithm {
     protected static final int CKM_NSS_SP800_108_DOUBLE_PIPELINE_KDF_DERIVE_DATA=77;
 
     // RSA-PSS
-    protected static final short SEC_OID_PKCS1_RSA_PSS_SIGNATURE = 78;
+    protected static final int SEC_OID_PKCS1_RSA_PSS_SIGNATURE = 78;
+
+    // RSA-OAEP
+    protected static final int CKM_RSA_PKCS_OAEP = 79;
+
+    // CKM_AES_KEY_WRAP_KWP for HSM support
+    protected static final int CKM_AES_KEY_WRAP_KWP = 80;
 }

@@ -6,7 +6,7 @@ Summary:        Java Security Services (JSS)
 URL:            http://www.dogtagpki.org/wiki/JSS
 License:        MPLv1.1 or GPLv2+ or LGPLv2+
 
-Version:        4.8.0
+Version:        4.8.1
 Release:        1%{?_timestamp}%{?_commit_id}%{?dist}
 #global         _phase -a1
 
@@ -33,7 +33,7 @@ Source:         https://github.com/dogtagpki/%{name}/archive/v%{version}%{?_phas
 # autosetup
 BuildRequires:  git
 BuildRequires:  make
-BuildRequires:  cmake
+BuildRequires:  cmake >= 3.14
 BuildRequires:  zip
 BuildRequires:  unzip
 
@@ -68,8 +68,8 @@ Requires:       apache-commons-lang3
 
 Conflicts:      ldapjdk < 4.20
 Conflicts:      idm-console-framework < 1.2
-Conflicts:      tomcatjss < 7.3.4
-Conflicts:      pki-base < 10.6.5
+Conflicts:      tomcatjss < 7.6.0
+Conflicts:      pki-base < 10.10.0
 
 %description
 Java Security Services (JSS) is a java native interface which provides a bridge
