@@ -7,7 +7,7 @@
 
 Name: jss
 Version: 4.8.1
-Release: alt1
+Release: alt1.1
 
 Summary: Java Security Services (JSS)
 License: MPL-1.1 or GPLv2+ or LGPLv2+
@@ -124,6 +124,9 @@ cp -p *.txt %buildroot%_javadocdir/%name-%version
 %_javadocdir/%name-%version
 
 %changelog
+* Tue Apr 27 2021 Arseny Maslennikov <arseny@altlinux.org> 4.8.1-alt1.1
+- NMU: spec: adapted to new cmake macros.
+
 * Fri Feb 05 2021 Stanislav Levin <slev@altlinux.org> 4.8.1-alt1
 - 4.8.0 -> 4.8.1.
 
