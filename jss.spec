@@ -85,32 +85,32 @@ export BUILD_OPT=1
     -DJAVA_HOME=%java_home \
     ..
 
-%cmake_build all javadoc
+%cmake_build --target all javadoc
 
 %check
 # FIPS is not enabled in kernel
-cat > BUILD/CTestCustom.cmake <<EOF
+cat > %_cmake__builddir/CTestCustom.cmake <<EOF
 set(CTEST_CUSTOM_TESTS_IGNORE
    Enable_FipsMODE
 )
 EOF
-%cmake_build ARGS=--output-on-failure test
+CTEST_OUTPUT_ON_FAILURE=1 %cmake_build --target test
 
 %install
 install -d -m 0755 %buildroot%_jnidir
-install -m 644 BUILD/jss4.jar %buildroot%_jnidir/jss4.jar
+install -m 644 %_cmake__builddir/jss4.jar %buildroot%_jnidir/jss4.jar
 
 # We have to use the name libjss4.so because this is dynamically
 # loaded by the jar file.
 install -d -m 0755 %buildroot%_libdir/jss
-install -m 0755 BUILD/libjss4.so %buildroot%_libdir/jss/
+install -m 0755 %_cmake__builddir/libjss4.so %buildroot%_libdir/jss/
 pushd  %buildroot%_libdir/jss
     ln -fs %_jnidir/jss4.jar jss4.jar
 popd
 
 # javadoc
 install -d -m 0755 %buildroot%_javadocdir/%name-%version
-cp -rp BUILD/docs/* %buildroot%_javadocdir/%name-%version
+cp -rp %_cmake__builddir/docs/* %buildroot%_javadocdir/%name-%version
 cp -p jss.html %buildroot%_javadocdir/%name-%version
 cp -p *.txt %buildroot%_javadocdir/%name-%version
 
