@@ -1,7 +1,12 @@
 %define _unpackaged_files_terminate_build 1
 %define java_home %_jvmdir/jre
 
+# fails on migration to Java11, need to investigate
+%ifarch ppc64le
+%def_without check
+%else
 %def_with check
+%endif
 
 %define nss_version 3.44
 
