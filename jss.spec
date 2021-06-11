@@ -25,7 +25,7 @@ BuildRequires: gcc-c++
 BuildRequires: jaxb-api
 BuildRequires: /proc
 BuildRequires: cmake
-BuildRequires: java-1.8.0-openjdk-devel
+BuildRequires: java-11-devel
 BuildRequires: jpackage-generic-compat
 BuildRequires: libnss-devel >= %nss_version
 BuildRequires: libnspr-devel
@@ -41,7 +41,6 @@ BuildRequires: nss-utils >= %nss_version
 
 Requires: apache-commons-lang3
 Requires: jaxb-api
-Requires: java-1.8.0-openjdk-headless
 Requires: slf4j
 Requires: libnss >= %nss_version
 
