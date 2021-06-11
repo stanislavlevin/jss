@@ -22,7 +22,7 @@ Patch: %name-%version-alt.patch
 BuildRequires(pre): rpm-macros-java
 BuildRequires(pre): rpm-macros-cmake
 BuildRequires: gcc-c++
-BuildRequires: glassfish-jaxb-api
+BuildRequires: jaxb-api
 BuildRequires: /proc
 BuildRequires: cmake
 BuildRequires: java-1.8.0-openjdk-devel
@@ -40,7 +40,7 @@ BuildRequires: nss-utils >= %nss_version
 %endif
 
 Requires: apache-commons-lang3
-Requires: glassfish-jaxb-api
+Requires: jaxb-api
 Requires: java-1.8.0-openjdk-headless
 Requires: slf4j
 Requires: libnss >= %nss_version
